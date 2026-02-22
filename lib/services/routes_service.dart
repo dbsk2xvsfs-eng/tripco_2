@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-enum RouteTravelMode { drive, walk, bicycle, transit }
+enum RouteTravelMode { drive, walk, transit }
 
 class RouteResult {
   final int distanceMeters;
@@ -22,8 +22,6 @@ class RoutesService {
         return "DRIVE";
       case RouteTravelMode.walk:
         return "WALK";
-      case RouteTravelMode.bicycle:
-        return "BICYCLE";
       case RouteTravelMode.transit:
         return "TRANSIT";
     }

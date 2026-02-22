@@ -6,8 +6,6 @@ class NavigationService {
     switch (t) {
       case TransportType.walk:
         return "walking";
-      case TransportType.bike:
-        return "bicycling";
       case TransportType.transit:
         return "transit";
       case TransportType.car:
@@ -21,9 +19,12 @@ class NavigationService {
     required TransportType type,
   }) async {
     final mode = _travelMode(type);
-    final uri = Uri.parse(
-      "https://www.google.com/maps/dir/?api=1&destination=$destLat,$destLng&travelmode=$mode",
-    );
+
+    final uri = Uri.https("www.google.com", "/maps/dir/", {
+      "api": "1",
+      "destination": "$destLat,$destLng",
+      "travelmode": mode,
+    });
 
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok) {

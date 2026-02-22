@@ -35,66 +35,56 @@ class _NavigationSheetState extends State<NavigationSheet> {
     _load();
   }
 
-  double _estimatePriceEur(RouteTravelMode mode, int distanceMeters) {
-    final km = distanceMeters / 1000.0;
-    switch (mode) {
-      case RouteTravelMode.walk:
-        return 0;
-      case RouteTravelMode.bicycle:
-        return 2.0;
-      case RouteTravelMode.transit:
-        return 2.5;
-      case RouteTravelMode.drive:
-        return (km * 0.18) + 2.0;
-    }
+  String _formatMinutes(int minutes) {
+    if (minutes < 60) return "$minutes min";
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return "$h:${m.toString().padLeft(2, '0')} hod";
   }
 
-  String _difficulty(RouteTravelMode mode) {
-    switch (mode) {
-      case RouteTravelMode.walk:
-      case RouteTravelMode.bicycle:
-        return "Easy";
-      case RouteTravelMode.transit:
-        return "Medium";
-      case RouteTravelMode.drive:
-        return "Hard";
-    }
+  String _formatKm(int distanceMeters) {
+    final km = distanceMeters / 1000.0;
+    return "${km.toStringAsFixed(1)} km";
   }
 
   Future<void> _load() async {
     try {
       final modes = <RouteTravelMode>[
         RouteTravelMode.walk,
-        RouteTravelMode.bicycle,
         RouteTravelMode.transit,
         RouteTravelMode.drive,
       ];
 
-      final results = await Future.wait(modes.map((m) {
-        return widget.routes.computeRoute(
-          originLat: widget.originLat,
-          originLng: widget.originLng,
-          destLat: widget.place.lat,
-          destLng: widget.place.lng,
-          mode: m,
-        );
+      final results = await Future.wait(modes.map((m) async {
+        try {
+          return await widget.routes.computeRoute(
+            originLat: widget.originLat,
+            originLng: widget.originLng,
+            destLat: widget.place.lat,
+            destLng: widget.place.lng,
+            mode: m,
+          );
+        } catch (_) {
+          // If one mode fails (e.g., transit not available), just skip it.
+          return null;
+        }
       }));
 
       final opts = <TransportOption>[];
       for (int i = 0; i < modes.length; i++) {
         final m = modes[i];
         final r = results[i];
+        if (r == null) continue;
+        if (r.distanceMeters <= 0 || r.durationSeconds <= 0) continue;
 
         final label = switch (m) {
           RouteTravelMode.walk => "Walking",
-          RouteTravelMode.bicycle => "Bike",
           RouteTravelMode.transit => "Public transport",
           RouteTravelMode.drive => "Car",
         };
 
         final type = switch (m) {
           RouteTravelMode.walk => TransportType.walk,
-          RouteTravelMode.bicycle => TransportType.bike,
           RouteTravelMode.transit => TransportType.transit,
           RouteTravelMode.drive => TransportType.car,
         };
@@ -104,8 +94,6 @@ class _NavigationSheetState extends State<NavigationSheet> {
             type: type,
             label: label,
             minutes: r.durationMinutes,
-            priceEur: _estimatePriceEur(m, r.distanceMeters),
-            difficulty: _difficulty(m),
             distanceMeters: r.distanceMeters,
           ),
         );
@@ -114,6 +102,7 @@ class _NavigationSheetState extends State<NavigationSheet> {
       setState(() {
         _options = opts;
         _loading = false;
+        _error = opts.isEmpty ? "No routes found" : null;
       });
     } catch (e) {
       setState(() {
@@ -123,11 +112,15 @@ class _NavigationSheetState extends State<NavigationSheet> {
     }
   }
 
-  IconData _iconFor(String label) {
-    if (label == "Walking") return Icons.directions_walk;
-    if (label == "Bike") return Icons.directions_bike;
-    if (label == "Public transport") return Icons.directions_transit;
-    return Icons.directions_car;
+  IconData _iconFor(TransportType type) {
+    switch (type) {
+      case TransportType.walk:
+        return Icons.directions_walk;
+      case TransportType.transit:
+        return Icons.directions_transit;
+      case TransportType.car:
+        return Icons.directions_car;
+    }
   }
 
   @override
@@ -152,7 +145,7 @@ class _NavigationSheetState extends State<NavigationSheet> {
                 child: CircularProgressIndicator(),
               ),
 
-            if (_error != null)
+            if (!_loading && _error != null)
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text("Routing error: $_error"),
@@ -161,11 +154,14 @@ class _NavigationSheetState extends State<NavigationSheet> {
             if (!_loading && _error == null)
               ..._options.map((o) {
                 return Card(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   child: ListTile(
-                    leading: Icon(_iconFor(o.label)),
-                    title: Text("${o.label} · ${o.minutes} min"),
-                    subtitle: Text("${o.priceText} · ${o.difficulty}"),
+                    leading: Icon(_iconFor(o.type)),
+                    title: Text(
+                      "${o.label} · ${_formatMinutes(o.minutes)} · ${_formatKm(o.distanceMeters)}",
+                    ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () async {
                       Navigator.of(context).pop();
