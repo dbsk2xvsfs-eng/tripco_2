@@ -1,9 +1,6 @@
-# build_backup.ps1
-# Spustí flutter build a po úspěchu udělá git commit + push (záloha)
-
 param(
-  [ValidateSet("apk","appbundle","run","debug")]
-  [string]$target = "apk"
+  [ValidateSet('apk','appbundle','run','debug')]
+  [string]$target = 'apk'
 )
 
 function Fail($msg) {
@@ -11,62 +8,44 @@ function Fail($msg) {
   exit 1
 }
 
-# 1) kontrola, že jsme ve Flutter projektu
-if (!(Test-Path ".\pubspec.yaml")) {
-  Fail "Nenalezen pubspec.yaml. Spusť to v kořeni Flutter projektu."
+if (!(Test-Path .\pubspec.yaml)) {
+  Fail 'Nenalezen pubspec.yaml. Spust to v koreni Flutter projektu.'
 }
 
-# 2) kontrola git
-git rev-parse --is-inside-work-tree *> $null
-if ($LASTEXITCODE -ne 0) {
-  Fail "Tohle není git repo. Nejprve: git init && git add . && git commit -m 'init'"
-}
+Write-Host ('== Flutter ' + $target + ' ==') -ForegroundColor Cyan
 
-# 3) kontrola remote origin
-$remote = git remote get-url origin 2>$null
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($remote)) {
-  Fail "Chybí git remote 'origin'. Nejdřív přidej GitHub remote (git remote add origin ...)."
-}
-
-# 4) build / run
-Write-Host "== Flutter $target ==" -ForegroundColor Cyan
-
-if ($target -eq "apk") {
+if ($target -eq 'apk') {
   flutter build apk
-} elseif ($target -eq "appbundle") {
+} elseif ($target -eq 'appbundle') {
   flutter build appbundle
-} elseif ($target -eq "debug") {
+} elseif ($target -eq 'debug') {
   flutter build apk --debug
-} elseif ($target -eq "run") {
+} elseif ($target -eq 'run') {
   flutter run
 }
 
 if ($LASTEXITCODE -ne 0) {
-  Fail "Flutter build/run selhal. Záloha se neprovede (aby se nelogovaly rozbité změny)."
+  Fail 'Build selhal – zalohu neprovadim.'
 }
 
-# 5) pokud není žádná změna, nic necommituj
-git status --porcelain | Out-String | ForEach-Object { $changes = $_ }
+$changes = git status --porcelain
 if ([string]::IsNullOrWhiteSpace($changes)) {
-  Write-Host "== Žádné změny k záloze ==" -ForegroundColor Yellow
+  Write-Host '== Zadne zmeny k zaloze ==' -ForegroundColor Yellow
   exit 0
 }
 
-# 6) commit + push
-$ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-$branch = (git branch --show-current).Trim()
-if ([string]::IsNullOrWhiteSpace($branch)) { $branch = "main" }
+$ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+$msg = 'Auto backup after build: ' + $ts
 
-Write-Host "== Git backup: commit + push ==" -ForegroundColor Green
 git add -A
-git commit -m "Auto backup after build: $ts"
+git commit -m $msg
 if ($LASTEXITCODE -ne 0) {
-  Fail "Commit selhal (možná chybí user.name/user.email)."
+  Fail 'Commit selhal.'
 }
 
-git push origin $branch
+git push
 if ($LASTEXITCODE -ne 0) {
-  Fail "Push selhal (zkontroluj přihlášení / token / rights)."
+  Fail 'Push selhal.'
 }
 
-Write-Host "== Hotovo: záloha na GitHub ==" -ForegroundColor Green
+Write-Host '== Hotovo: zaloha odeslana na GitHub ==' -ForegroundColor Green
