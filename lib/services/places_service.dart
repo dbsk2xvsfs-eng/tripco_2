@@ -28,8 +28,9 @@ class PlacesService {
     final headers = {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
+      // ✅ Added places.websiteUri so we can show a website link for entry info
       "X-Goog-FieldMask":
-      "places.id,places.displayName,places.location,places.primaryType,places.rating,places.userRatingCount,places.currentOpeningHours",
+      "places.id,places.displayName,places.location,places.primaryType,places.rating,places.userRatingCount,places.currentOpeningHours,places.websiteUri",
     };
 
     final body = {

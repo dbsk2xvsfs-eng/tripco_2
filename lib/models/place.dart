@@ -2,13 +2,9 @@ class Place {
   final String id;
 
   final String name;
-  final String type; // playful: "🌳 Nature" etc.
+  final String type;
 
-  final String entryPrice; // MVP: often "Unknown"
-  final String transportPrice; // optional text
-
-  final String crowdLevel; // MVP: "Unknown" (later improve)
-  final int distanceMinutes; // MVP seed (later from routes)
+  final int distanceMinutes;
 
   final double lat;
   final double lng;
@@ -17,21 +13,21 @@ class Place {
   final int? userRatingsTotal;
   final bool? openNow;
 
+  final String? websiteUrl; // ✅ NOVÉ
+
   final bool done;
 
   const Place({
     required this.id,
     required this.name,
     required this.type,
-    required this.entryPrice,
-    required this.transportPrice,
-    required this.crowdLevel,
     required this.distanceMinutes,
     required this.lat,
     required this.lng,
     this.rating,
     this.userRatingsTotal,
     this.openNow,
+    this.websiteUrl, // ✅ NOVÉ
     this.done = false,
   });
 
@@ -39,30 +35,26 @@ class Place {
     String? id,
     String? name,
     String? type,
-    String? entryPrice,
-    String? transportPrice,
-    String? crowdLevel,
     int? distanceMinutes,
     double? lat,
     double? lng,
     double? rating,
     int? userRatingsTotal,
     bool? openNow,
+    String? websiteUrl,
     bool? done,
   }) {
     return Place(
       id: id ?? this.id,
       name: name ?? this.name,
       type: type ?? this.type,
-      entryPrice: entryPrice ?? this.entryPrice,
-      transportPrice: transportPrice ?? this.transportPrice,
-      crowdLevel: crowdLevel ?? this.crowdLevel,
       distanceMinutes: distanceMinutes ?? this.distanceMinutes,
       lat: lat ?? this.lat,
       lng: lng ?? this.lng,
       rating: rating ?? this.rating,
       userRatingsTotal: userRatingsTotal ?? this.userRatingsTotal,
       openNow: openNow ?? this.openNow,
+      websiteUrl: websiteUrl ?? this.websiteUrl,
       done: done ?? this.done,
     );
   }
@@ -72,15 +64,13 @@ class Place {
       "id": id,
       "name": name,
       "type": type,
-      "entryPrice": entryPrice,
-      "transportPrice": transportPrice,
-      "crowdLevel": crowdLevel,
       "distanceMinutes": distanceMinutes,
       "lat": lat,
       "lng": lng,
       "rating": rating,
       "userRatingsTotal": userRatingsTotal,
       "openNow": openNow,
+      "websiteUrl": websiteUrl, // ✅ NOVÉ
       "done": done,
     };
   }
@@ -90,15 +80,13 @@ class Place {
       id: (m["id"] ?? "").toString(),
       name: (m["name"] ?? "").toString(),
       type: (m["type"] ?? "✨ Spot").toString(),
-      entryPrice: (m["entryPrice"] ?? "Unknown").toString(),
-      transportPrice: (m["transportPrice"] ?? "€?").toString(),
-      crowdLevel: (m["crowdLevel"] ?? "Unknown").toString(),
       distanceMinutes: (m["distanceMinutes"] as num?)?.toInt() ?? 10,
       lat: (m["lat"] as num?)?.toDouble() ?? 0.0,
       lng: (m["lng"] as num?)?.toDouble() ?? 0.0,
       rating: (m["rating"] as num?)?.toDouble(),
       userRatingsTotal: (m["userRatingsTotal"] as num?)?.toInt(),
       openNow: m["openNow"] as bool?,
+      websiteUrl: m["websiteUrl"]?.toString(), // ✅ NOVÉ
       done: m["done"] as bool? ?? false,
     );
   }

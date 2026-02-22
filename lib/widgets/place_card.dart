@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../i18n/strings.dart';
 import '../models/place.dart';
 import '../services/routes_service.dart';
@@ -31,9 +33,24 @@ class PlaceCard extends StatelessWidget {
     required this.onToggleFavorite,
   });
 
+  Future<void> _openWebsite(BuildContext context, String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not open website")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+
+    final website = (place.websiteUrl ?? "").trim();
+    final hasWebsite = website.isNotEmpty;
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -57,15 +74,31 @@ class PlaceCard extends StatelessWidget {
               children: [
                 Text(place.type),
                 const SizedBox(width: 10),
-                if (place.openNow != null)
-                  Text(place.openNow! ? s.open : s.closed),
+                if (place.openNow != null) Text(place.openNow! ? s.open : s.closed),
                 const SizedBox(width: 10),
                 if (place.rating != null) Text("⭐ ${place.rating!.toStringAsFixed(1)}"),
               ],
             ),
-            const SizedBox(height: 10),
 
-            Text("🎟️ ${s.entry}: ${place.entryPrice}"),
+            if (hasWebsite) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.public, size: 16),
+                  const SizedBox(width: 6),
+                  Text("${s.entry}: "),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    tooltip: "Open website",
+                    onPressed: () => _openWebsite(context, website),
+                  ),
+                ],
+              ),
+            ],
+
             const SizedBox(height: 10),
 
             Row(

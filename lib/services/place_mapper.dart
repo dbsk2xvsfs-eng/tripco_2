@@ -35,22 +35,23 @@ class PlaceMapper {
     final primaryType = p["primaryType"]?.toString();
     final rating = (p["rating"] as num?)?.toDouble();
     final userRatingCount = (p["userRatingCount"] as num?)?.toInt();
-
     final openNow = p["currentOpeningHours"]?["openNow"] as bool?;
+
+    // 🔥 NOVÉ – načteme websiteUri z Places API (v1)
+    final websiteUrl = p["websiteUri"]?.toString();
 
     return Place(
       id: id,
       name: displayName,
       type: playfulTypeFromPrimary(primaryType),
-      entryPrice: "Unknown",
-      transportPrice: "€?",
-      crowdLevel: "Unknown",
       distanceMinutes: distanceMinutes,
       lat: lat,
       lng: lng,
       rating: rating,
       userRatingsTotal: userRatingCount,
       openNow: openNow,
+      websiteUrl: websiteUrl, // 👈 přidáno
+      done: false,
     );
   }
 }

@@ -11,12 +11,10 @@ import '../services/favorites_storage.dart';
 import '../services/location_service.dart';
 import '../services/places_service.dart';
 import '../services/plan_storage.dart';
-import '../services/profile_storage.dart';
 import '../services/recommendation_service.dart';
 import '../services/routes_service.dart';
 
 import '../widgets/place_card.dart';
-import '../widgets/profile_sheet.dart';
 
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
@@ -34,7 +32,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   late final RoutesService _routes;
 
   List<Place> _plan = [];
-  UserProfile _profile = UserProfile.solo;
+
+  // Profile selection removed completely — keep a fixed profile for plan generation.
+  static const UserProfile _fixedProfile = UserProfile.solo;
 
   static const _apiKey = String.fromEnvironment('GOOGLE_API_KEY');
 
@@ -52,7 +52,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
     _rec = RecommendationService(places: PlacesService(apiKey: _apiKey));
     _routes = RoutesService(apiKey: _apiKey);
-    _profile = ProfileStorage.loadOrDefault();
 
     _init();
   }
@@ -81,7 +80,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       final plan = await _rec.getTodayPlan(
         lat: p.latitude,
         lng: p.longitude,
-        profile: _profile,
+        profile: _fixedProfile,
         maxItems: 10,
       );
 
@@ -110,7 +109,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       final plan = await _rec.getTodayPlan(
         lat: _pos!.latitude,
         lng: _pos!.longitude,
-        profile: _profile,
+        profile: _fixedProfile,
         maxItems: 10,
       );
 
@@ -149,10 +148,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     await AnalyticsService.logRemove(id);
     await PlanStorage.savePlan(_plan);
 
-    final s = S.of(context);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.removed)));
-    }
+    // Removed snackbar removed (it was popping "Removed" repeatedly).
   }
 
   Future<void> _replaceAt(int index) async {
@@ -167,7 +163,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       final replacement = await _rec.replaceOne(
         lat: _pos!.latitude,
         lng: _pos!.longitude,
-        profile: _profile,
+        profile: _fixedProfile,
         current: current,
         excludeIds: _excludeIds(),
       );
@@ -219,25 +215,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     setState(() {});
   }
 
-  Future<void> _changeProfile() async {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (_) => ProfileSheet(
-        current: _profile,
-        onSelected: (p) async {
-          setState(() => _profile = p);
-          await ProfileStorage.save(p);
-          await AnalyticsService.logProfile(p.name);
-          await _startFresh(); // nový plán podle režimu
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
@@ -261,11 +238,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
         title: Text(s.dayPlan),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: Text(_profile.emoji, style: const TextStyle(fontSize: 20)),
-            tooltip: "Change mode",
-            onPressed: _changeProfile,
-          ),
           IconButton(
             icon: const Icon(Icons.ios_share),
             tooltip: s.share,
