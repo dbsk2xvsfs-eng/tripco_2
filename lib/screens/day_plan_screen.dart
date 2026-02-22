@@ -247,9 +247,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     // ✅ ať po initu ty vybrané zmizí z poolů
     final ids = out.map((p) => p.id).toSet();
     for (final k in _categoryPools.keys) {
-      _categoryPools[k] = (_categoryPools[k] ?? const <Place>[])
-          .where((p) => !ids.contains(p.id))
-          .toList();
+      _categoryPools[k] =
+          (_categoryPools[k] ?? const <Place>[]).where((p) => !ids.contains(p.id)).toList();
     }
 
     return out;
@@ -284,19 +283,98 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     return _categoryPools[_selectedTab] ?? const <Place>[];
   }
 
+  // ------------------- Category routing helpers -------------------
+
+  String _categoryForPlace(Place p) {
+    final pt = (p.primaryType ?? "").trim();
+    if (pt.isEmpty) return "Attraction";
+
+    // priorita: nejdřív Cafe/Restaurant (ať se nechytnou omylem do Attraction)
+    if (_categoryConfig["Cafe"]!.includedTypes.contains(pt)) return "Cafe";
+    if (_categoryConfig["Restaurant"]!.includedTypes.contains(pt)) return "Restaurant";
+
+    // Castles
+    if (_categoryConfig["Castles"]!.includedTypes.contains(pt)) return "Castles";
+
+    // ostatní hlavní
+    for (final entry in _categoryConfig.entries) {
+      final cat = entry.key;
+      final cfg = entry.value;
+
+      if (!_mainCategoriesForAll.contains(cat) && cat != "Castles") continue;
+      if (cfg.includedTypes.contains(pt)) return cat;
+    }
+
+    return "Attraction";
+  }
+
+  void _insertBackToPool(Place p) {
+    if (_pos == null) return;
+
+    final cat = _categoryForPlace(p);
+    final originLat = _pos!.latitude;
+    final originLng = _pos!.longitude;
+
+    final list = List<Place>.from(_categoryPools[cat] ?? const <Place>[]);
+
+    // pokud už je v All, nevracej
+    if (_allPlan.any((x) => x.id == p.id)) return;
+
+    // pokud už v poolu je, nedělej nic
+    if (list.any((x) => x.id == p.id)) return;
+
+    list.add(p);
+
+    // seřadit dle km
+    list.sort((a, b) {
+      final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
+      final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
+      return da.compareTo(db);
+    });
+
+    // oříznout na max 15
+    final trimmed = list.take(_poolSize).toList();
+    _categoryPools[cat] = trimmed;
+  }
+
+  void _removeFromAllPoolsById(String id) {
+    for (final k in _categoryPools.keys) {
+      _categoryPools[k] =
+          (_categoryPools[k] ?? const <Place>[]).where((x) => x.id != id).toList();
+    }
+  }
+
   // ------------------- Actions: All -------------------
 
   Set<String> _allIds() => _allPlan.map((p) => p.id).toSet();
 
   Future<void> _removeFromAllById(String id) async {
+    final removed = _allPlan.firstWhere((p) => p.id == id, orElse: () => const Place(
+      id: "",
+      name: "",
+      type: "",
+      primaryType: null,
+      distanceMinutes: 0,
+      lat: 0,
+      lng: 0,
+      done: false,
+      rating: null,
+      userRatingsTotal: null,
+      openNow: null,
+      websiteUrl: null,
+    ));
+
     setState(() {
       _allPlan.removeWhere((p) => p.id == id);
+
+      // ✅ VRÁTIT ZPĚT DO POOLU (pokud jsme ho našli)
+      if (removed.id.isNotEmpty) {
+        _insertBackToPool(removed);
+      }
     });
+
     await AnalyticsService.logRemove(id);
     await PlanStorage.savePlan(_allPlan);
-
-    // ✅ vrátit zpět do poolu? (zatím ne – podle zadání All je hlavní plan,
-    // katalog je samostatný; když chceš vracet, řekni a doplním.)
   }
 
   Future<void> _toggleDoneInAllById(String id) async {
@@ -324,6 +402,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     if (_pos == null) return;
 
     final cat = _categoryForPlace(current);
+
     final candidates = (_categoryPools[cat] ?? const <Place>[])
         .where((p) => p.id != current.id)
         .toList();
@@ -347,62 +426,32 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     if (selected == null) return;
 
     setState(() {
+      // ✅ vyměň v All
       final idx = _allPlan.indexWhere((p) => p.id == current.id);
       if (idx != -1) _allPlan[idx] = selected;
+
+      // ✅ vybraný nesmí zůstat v žádném poolu
+      _removeFromAllPoolsById(selected.id);
+
+      // ✅ a původní "current" vrať zpět do poolu (aby se neztratil)
+      _insertBackToPool(current);
     });
 
     await AnalyticsService.logReplace(current.id);
     await PlanStorage.savePlan(_allPlan);
-
-    // ✅ po replace: nově vybraný prvek musí zmizet z poolů
-    setState(() {
-      for (final k in _categoryPools.keys) {
-        _categoryPools[k] = (_categoryPools[k] ?? const <Place>[])
-            .where((p) => p.id != selected.id)
-            .toList();
-      }
-    });
-  }
-
-  String _categoryForPlace(Place p) {
-    final pt = (p.primaryType ?? "").trim();
-    if (pt.isEmpty) return "Attraction";
-
-    for (final entry in _categoryConfig.entries) {
-      final cat = entry.key;
-      final cfg = entry.value;
-
-      if (!_mainCategoriesForAll.contains(cat) && cat != "Castles") continue;
-      if (cfg.includedTypes.contains(pt)) return cat;
-    }
-
-    // fallback: restaurant/cafe vs ostatní
-    if (_categoryConfig["Restaurant"]!.includedTypes.contains(pt)) return "Restaurant";
-    if (_categoryConfig["Cafe"]!.includedTypes.contains(pt)) return "Cafe";
-    return "Attraction";
   }
 
   // ------------------- Actions: Category pools -------------------
 
   Future<void> _addToAllFromCategory(Place p) async {
     if (_selectedTab == "All") return;
-
     if (_allPlan.any((x) => x.id == p.id)) return;
 
     setState(() {
-      // ✅ add to all
       _allPlan.add(p);
 
-      // ✅ remove from CURRENT pool
-      final cur = _categoryPools[_selectedTab] ?? <Place>[];
-      cur.removeWhere((x) => x.id == p.id);
-      _categoryPools[_selectedTab] = cur;
-
-      // ✅ remove from ALL pools (aby se nedupliko v Food/Cafe/Restaurant apod.)
-      for (final k in _categoryPools.keys) {
-        _categoryPools[k] =
-            (_categoryPools[k] ?? const <Place>[]).where((x) => x.id != p.id).toList();
-      }
+      // ✅ remove from ALL pools
+      _removeFromAllPoolsById(p.id);
     });
 
     await PlanStorage.savePlan(_allPlan);
@@ -501,7 +550,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       ),
       body: Column(
         children: [
-          // ✅ vždy počítat All
           _SummaryBar(count: _allPlan.length),
 
           SizedBox(
@@ -568,7 +616,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                   onAddToAll: () => _addToAllFromCategory(place),
                   isFavorite: isFav,
                   onToggleFavorite: () => _toggleFavorite(place),
-                  // v categoryMode se tyhle stejně nezobrazí
                   onRemove: null,
                   onReplace: null,
                   onToggleDone: null,

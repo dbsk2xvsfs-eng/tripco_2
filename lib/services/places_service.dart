@@ -24,9 +24,10 @@ class PlacesService {
       "cafe",
     ],
   }) async {
-    // ✅ Google Places API limit: radius must be 0..50000 meters
+    // Google Places API limits:
+    // - radius: 0..50000
+    // - maxResultCount: 1..20
     final safeRadius = radiusMeters.clamp(0, 50000);
-    // ✅ Google Places API limit: maxResultCount must be 1..20
     final safeMaxResults = maxResults.clamp(1, 20);
 
     final url = Uri.parse("https://places.googleapis.com/v1/places:searchNearby");
@@ -34,8 +35,20 @@ class PlacesService {
     final headers = {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask":
-      "places.id,places.displayName,places.location,places.primaryType,places.rating,places.userRatingCount,places.currentOpeningHours,places.websiteUri,places.googleMapsUri",
+      "X-Goog-FieldMask": [
+        "places.id",
+        "places.displayName",
+        "places.location",
+        "places.primaryType",
+        "places.types", // ✅ důležité pro Cafe/Restaurant fallback
+        "places.rating",
+        "places.userRatingCount",
+        "places.currentOpeningHours",
+        "places.websiteUri",
+        "places.googleMapsUri",
+        // volitelné (když chceš někdy zobrazovat přímo text od Googlu)
+        "places.primaryTypeDisplayName",
+      ].join(","),
     };
 
     final body = {

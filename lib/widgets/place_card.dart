@@ -88,41 +88,46 @@ class PlaceCard extends StatelessWidget {
             // type / open / rating
             Row(
               children: [
-                Text(place.type),
-                const SizedBox(width: 10),
-                if (place.openNow != null) Text(place.openNow! ? s.open : s.closed),
-                const SizedBox(width: 10),
-                if (place.rating != null) Text("⭐ ${place.rating!.toStringAsFixed(1)}"),
+                Expanded(child: Text(place.type)),
+                if (place.openNow != null) ...[
+                  const SizedBox(width: 10),
+                  Text(place.openNow! ? s.open : s.closed),
+                ],
+                if (place.rating != null) ...[
+                  const SizedBox(width: 10),
+                  Text("⭐ ${place.rating!.toStringAsFixed(1)}"),
+                ],
               ],
             ),
 
-            // ✅ WWW row (replaces "Entry: Unknown" everywhere)
+            // ✅ Entry row (only if website exists)
             if (hasWebsite) ...[
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Icon(Icons.public, size: 18, color: Colors.grey.shade700),
+                  Text(
+                    "${s.entry}:",
+                    style: TextStyle(color: Colors.grey.shade800),
+                  ),
                   const SizedBox(width: 8),
-                  Text("${s.entry}:", style: TextStyle(color: Colors.grey.shade800)),
-                  const SizedBox(width: 6),
                   IconButton(
                     onPressed: () => _openWebsite(context),
-                    icon: const Icon(Icons.open_in_new),
-                    tooltip: "Open website",
+                    icon: const Icon(Icons.public),
+                    tooltip: "Website",
+                    visualDensity: VisualDensity.compact,
                   ),
-                  const Spacer(),
                 ],
               ),
             ],
 
             const SizedBox(height: 10),
 
-            // top row: Mark done + Favorite (ALL mode only has Mark done)
+            // top row: Mark done (ALL) + Favorite (both)
             Row(
               children: [
                 if (!categoryMode)
                   GestureDetector(
-                    onTap: onToggleDone,
+                    onTap: () => onToggleDone?.call(),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
@@ -132,8 +137,7 @@ class PlaceCard extends StatelessWidget {
                       child: Text(place.done ? s.done : s.markDone),
                     ),
                   ),
-                if (!categoryMode) const Spacer(),
-
+                const Spacer(),
                 IconButton(
                   onPressed: onToggleFavorite,
                   icon: Icon(isFavorite ? Icons.star : Icons.star_border),
@@ -146,11 +150,10 @@ class PlaceCard extends StatelessWidget {
 
             // bottom actions: ALL vs CATEGORY
             if (categoryMode) ...[
-              // CATEGORY: Add to All only
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: onAddToAll,
+                  onPressed: onAddToAll, // null => disabled
                   child: const Text("Add to All"),
                 ),
               ),
@@ -181,12 +184,12 @@ class PlaceCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   IconButton(
-                    onPressed: onReplace,
+                    onPressed: onReplace, // null => disabled
                     icon: const Icon(Icons.shuffle),
                     tooltip: "Replace",
                   ),
                   IconButton(
-                    onPressed: onRemove,
+                    onPressed: onRemove, // null => disabled
                     icon: const Icon(Icons.close),
                     tooltip: "Remove",
                   ),
