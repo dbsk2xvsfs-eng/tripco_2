@@ -25,25 +25,27 @@ class PlacesService {
       "cafe",
     ],
   }) async {
-    final url = Uri.parse("https://places.googleapis.com/v1/places:searchNearby");
+    // ✅ Google Places API limit: radius must be 0..50000 meters
+    final safeRadius = radiusMeters.clamp(0, 50000);
+    // ✅ Google Places API limit: maxResultCount must be 1..20
+    final safeMaxResults = maxResults.clamp(1, 20);
 
-    // Places API: maxResultCount musí být 1..20
-    final safeMax = maxResults.clamp(1, 20);
+    final url = Uri.parse("https://places.googleapis.com/v1/places:searchNearby");
 
     final headers = {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask":
-      "places.id,places.displayName,places.location,places.primaryType,places.rating,places.userRatingCount,places.currentOpeningHours,places.websiteUri",
+      "places.id,places.displayName,places.location,places.primaryType,places.rating,places.userRatingCount,places.currentOpeningHours,places.websiteUri,places.googleMapsUri",
     };
 
     final body = {
       "includedTypes": includedTypes,
-      "maxResultCount": safeMax,
+      "maxResultCount": safeMaxResults,
       "locationRestriction": {
         "circle": {
           "center": {"latitude": lat, "longitude": lng},
-          "radius": radiusMeters,
+          "radius": safeRadius,
         }
       }
     };
@@ -54,6 +56,7 @@ class PlacesService {
     }
 
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
-    return (data["places"] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final places = (data["places"] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return places;
   }
 }

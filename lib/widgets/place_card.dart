@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../i18n/strings.dart';
 import '../models/place.dart';
 import '../services/routes_service.dart';
@@ -20,6 +18,10 @@ class PlaceCard extends StatelessWidget {
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
 
+  // ✅ když není null -> jsme v kategorii a zobrazíme Add to All,
+  // a zároveň schováme Replace/Delete/Done.
+  final VoidCallback? onAddToAll;
+
   const PlaceCard({
     super.key,
     required this.place,
@@ -31,26 +33,14 @@ class PlaceCard extends StatelessWidget {
     required this.onToggleDone,
     required this.isFavorite,
     required this.onToggleFavorite,
+    this.onAddToAll,
   });
-
-  Future<void> _openWebsite(BuildContext context, String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not open website")),
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
 
-    final website = (place.websiteUrl ?? "").trim();
-    final hasWebsite = website.isNotEmpty;
+    final isCatalogMode = onAddToAll != null || (onAddToAll == null && false);
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -65,8 +55,8 @@ class PlaceCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                decoration: place.done ? TextDecoration.lineThrough : null,
-                color: place.done ? Colors.grey : null,
+                decoration: (!isCatalogMode && place.done) ? TextDecoration.lineThrough : null,
+                color: (!isCatalogMode && place.done) ? Colors.grey : null,
               ),
             ),
             const SizedBox(height: 6),
@@ -80,88 +70,83 @@ class PlaceCard extends StatelessWidget {
               ],
             ),
 
-            if (hasWebsite) ...[
-              const SizedBox(height: 10),
+            const SizedBox(height: 10),
+
+            // ✅ Entry řádek už řešíš přes website ikonku (pokud existuje) -> tady nic nezobrazujeme
+
+            Row(
+              children: [
+                if (!isCatalogMode)
+                  GestureDetector(
+                    onTap: onToggleDone,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: Text(place.done ? s.done : s.markDone),
+                    ),
+                  ),
+                if (!isCatalogMode) const Spacer(),
+
+                if (isCatalogMode)
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: onAddToAll,
+                      child: Text(onAddToAll == null ? "Added" : "Add to All"),
+                    ),
+                  ),
+
+                if (!isCatalogMode)
+                  IconButton(
+                    onPressed: onToggleFavorite,
+                    icon: Icon(isFavorite ? Icons.star : Icons.star_border),
+                    tooltip: isFavorite ? s.saved : s.unsaved,
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+
+            if (!isCatalogMode)
               Row(
                 children: [
-                  const Icon(Icons.public, size: 16),
-                  const SizedBox(width: 6),
-                  Text("${s.entry}: "),
-                  const SizedBox(width: 6),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: place.done
+                          ? null
+                          : () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+                          ),
+                          builder: (_) => NavigationSheet(
+                            place: place,
+                            originLat: originLat,
+                            originLng: originLng,
+                            routes: routes,
+                          ),
+                        );
+                      },
+                      child: Text(s.navigate),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
                   IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    tooltip: "Open website",
-                    onPressed: () => _openWebsite(context, website),
+                    onPressed: onReplace,
+                    icon: const Icon(Icons.shuffle),
+                    tooltip: "Replace",
+                  ),
+                  IconButton(
+                    onPressed: onRemove,
+                    icon: const Icon(Icons.close),
+                    tooltip: "Remove",
                   ),
                 ],
               ),
-            ],
-
-            const SizedBox(height: 10),
-
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: onToggleDone,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.black12),
-                    ),
-                    child: Text(place.done ? s.done : s.markDone),
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: onToggleFavorite,
-                  icon: Icon(isFavorite ? Icons.star : Icons.star_border),
-                  tooltip: isFavorite ? s.saved : s.unsaved,
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
-
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: place.done
-                        ? null
-                        : () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-                        ),
-                        builder: (_) => NavigationSheet(
-                          place: place,
-                          originLat: originLat,
-                          originLng: originLng,
-                          routes: routes,
-                        ),
-                      );
-                    },
-                    child: Text(s.navigate),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                IconButton(
-                  onPressed: onReplace,
-                  icon: const Icon(Icons.shuffle),
-                  tooltip: "Replace",
-                ),
-                IconButton(
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.close),
-                  tooltip: "Remove",
-                ),
-              ],
-            ),
           ],
         ),
       ),

@@ -7,6 +7,11 @@ class RecommendationService {
   final PlacesService places;
   RecommendationService({required this.places});
 
+  // ✅ Helper (uvnitř třídy)
+  Place mapGooglePlace(Map<String, dynamic> p, {required int distanceMinutesSeed}) {
+    return PlaceMapper.fromGooglePlace(p, distanceMinutes: distanceMinutesSeed);
+  }
+
   Future<List<Place>> getTodayPlan({
     required double lat,
     required double lng,
@@ -26,7 +31,7 @@ class RecommendationService {
     int minutesSeed = 8;
     final mapped = raw.map((p) {
       minutesSeed += 2;
-      return PlaceMapper.fromGooglePlace(p, distanceMinutes: minutesSeed);
+      return mapGooglePlace(p, distanceMinutesSeed: minutesSeed);
     }).toList();
 
     final filtered = mapped.where((x) => x.openNow != false).toList();
@@ -56,7 +61,7 @@ class RecommendationService {
     final candidates = raw
         .map((p) {
       minutesSeed += 2;
-      return PlaceMapper.fromGooglePlace(p, distanceMinutes: minutesSeed);
+      return mapGooglePlace(p, distanceMinutesSeed: minutesSeed);
     })
         .where((p) => p.id.isNotEmpty)
         .where((p) => !excludeIds.contains(p.id))

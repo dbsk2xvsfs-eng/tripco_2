@@ -1,3 +1,6 @@
+// ignore: unused_import
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:share_plus/share_plus.dart';
@@ -33,12 +36,78 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   late final RoutesService _routes;
   late final PlacesService _places;
 
-  List<Place> _plan = [];
+  // ✅ All = výběr dne (z toho se maže a dělá replace)
+  List<Place> _allPlan = [];
+
+  // ✅ Kategorie = katalog (15 položek), jen Add to All
+  final Map<String, List<Place>> _categoryPools = {};
+
+  String _selectedTab = "All";
 
   static const UserProfile _fixedProfile = UserProfile.solo;
   static const _apiKey = String.fromEnvironment('GOOGLE_API_KEY');
 
-  String _selectedCategory = "All";
+  // ------------------- Category config -------------------
+
+  // “Hlavní” kategorie, ze kterých se skládá All: 3 z každé
+  static const List<String> _mainCategoriesForAll = [
+    "Culture",
+    "Nature",
+    "Attraction",
+    "Food",
+    "Castles",
+  ];
+
+  // Každá kategorie = přesné Google primaryType (includedTypes)
+  // radius podle požadavku
+  static const Map<String, _CategoryConfig> _categoryConfig = {
+    "Culture": _CategoryConfig(
+      includedTypes: {"museum", "art_gallery", "historical_landmark"},
+      radiusMeters: 50000,
+    ),
+    "Museum": _CategoryConfig(
+      includedTypes: {"museum"},
+      radiusMeters: 50000,
+    ),
+    "Nature": _CategoryConfig(
+      includedTypes: {"park", "hiking_area"},
+      radiusMeters: 40000,
+    ),
+    "Attraction": _CategoryConfig(
+      includedTypes: {"tourist_attraction", "amusement_park", "zoo", "aquarium"},
+      radiusMeters: 50000,
+    ),
+    "Shopping": _CategoryConfig(
+      includedTypes: {"shopping_mall"},
+      radiusMeters: 20000,
+    ),
+    "Food": _CategoryConfig(
+      includedTypes: {"restaurant", "cafe"},
+      radiusMeters: 15000, // ✅ dle zadání
+    ),
+    "Restaurant": _CategoryConfig(
+      includedTypes: {"restaurant"},
+      radiusMeters: 15000,
+    ),
+    "Cafe": _CategoryConfig(
+      includedTypes: {"cafe"},
+      radiusMeters: 15000,
+    ),
+    "Indoor": _CategoryConfig(
+      includedTypes: {"museum", "art_gallery", "shopping_mall", "aquarium"},
+      radiusMeters: 30000,
+    ),
+    "Castles": _CategoryConfig(
+      includedTypes: {"castle", "historical_landmark"},
+      radiusMeters: 100000, // ✅ dle zadání (100 km)
+    ),
+  };
+
+  // Kolik položek v katalogu a kolik do All
+  static const int _poolSize = 15;
+  static const int _takeFromEachToAll = 3;
+
+  // ------------------- lifecycle -------------------
 
   @override
   void initState() {
@@ -70,59 +139,27 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
         return;
       }
 
-      final saved = PlanStorage.loadPlan();
-      if (saved != null && saved.isNotEmpty) {
-        setState(() {
-          _pos = p;
-          _plan = saved;
-          _loading = false;
-        });
-        return;
+      _pos = p;
+
+      // ✅ load saved All plan only
+      final savedAll = PlanStorage.loadPlan();
+      if (savedAll != null && savedAll.isNotEmpty) {
+        _allPlan = savedAll;
       }
 
-      final plan = await _rec.getTodayPlan(
-        lat: p.latitude,
-        lng: p.longitude,
-        profile: _fixedProfile,
-        maxItems: 10,
-      );
+      // ✅ always (re)load category pools (katalogy)
+      await _loadCategoryPools();
 
-      await PlanStorage.savePlan(plan);
-
-      setState(() {
-        _pos = p;
-        _plan = plan;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  Set<String> _excludeIds() => _plan.map((p) => p.id).toSet();
-
-  Future<void> _refreshAll() async {
-    if (_pos == null) return;
-    setState(() => _loading = true);
-
-    try {
-      final plan = await _rec.getTodayPlan(
-        lat: _pos!.latitude,
-        lng: _pos!.longitude,
-        profile: _fixedProfile,
-        maxItems: 10,
-      );
-
-      await PlanStorage.savePlan(plan);
+      // ✅ if no saved All, build initial All = 3 z každé hlavní kategorie
+      if (_allPlan.isEmpty) {
+        _allPlan = _buildInitialAllFromPools();
+        await PlanStorage.savePlan(_allPlan);
+      }
 
       setState(() {
-        _plan = plan;
         _loading = false;
         _error = null;
-        _selectedCategory = "All";
+        _selectedTab = "All";
       });
     } catch (e) {
       setState(() {
@@ -132,76 +169,85 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     }
   }
 
-  Future<void> _startFresh() async {
-    await PlanStorage.clearPlan();
-    await _refreshAll();
+  // ------------------- Pools (katalog) -------------------
+
+  Future<void> _loadCategoryPools() async {
+    if (_pos == null) return;
+
+    final originLat = _pos!.latitude;
+    final originLng = _pos!.longitude;
+
+    // načti postupně (jednodušší debug); klidně můžeš změnit na Future.wait
+    for (final entry in _categoryConfig.entries) {
+      final key = entry.key;
+      final cfg = entry.value;
+
+      final raw = await _places.nearby(
+        lat: originLat,
+        lng: originLng,
+        radiusMeters: cfg.radiusMeters,
+        // Google Places: maxResultCount musí být 1..20
+        maxResults: 20,
+        includedTypes: cfg.includedTypes.toList(),
+      );
+
+      // map + filtr
+      int minutesSeed = 6;
+      final mapped = raw.map((p) {
+        minutesSeed += 1;
+        return _rec.mapGooglePlace(p, distanceMinutesSeed: minutesSeed);
+      }).where((x) => x.id.isNotEmpty).toList();
+
+      // řazení dle km (přímá vzdálenost)
+      mapped.sort((a, b) {
+        final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
+        final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
+        return da.compareTo(db);
+      });
+
+      // unikáty dle id + take 15
+      final uniq = <String>{};
+      final out = <Place>[];
+      for (final pl in mapped) {
+        if (uniq.add(pl.id)) out.add(pl);
+        if (out.length >= _poolSize) break;
+      }
+
+      _categoryPools[key] = out;
+    }
   }
 
-  Future<void> _sharePlan() async {
-    final lines = _plan.map((p) => "- ${p.name} (${p.primaryType ?? ""})").join("\n");
-    final text = "My Tripco Day Plan ☀️\n\n$lines";
-    await AnalyticsService.logShare(_plan.length);
-    await Share.share(text);
-  }
+  List<Place> _buildInitialAllFromPools() {
+    final used = <String>{};
+    final out = <Place>[];
 
-  void _removeById(String id) async {
-    setState(() {
-      _plan.removeWhere((p) => p.id == id);
-    });
-    await AnalyticsService.logRemove(id);
-    await PlanStorage.savePlan(_plan);
-  }
-
-  void _toggleDoneById(String id) async {
-    final idx = _plan.indexWhere((p) => p.id == id);
-    if (idx == -1) return;
-    final current = _plan[idx];
-    setState(() {
-      _plan[idx] = current.copyWith(done: !current.done);
-    });
-    await PlanStorage.savePlan(_plan);
-  }
-
-  Future<void> _toggleFavorite(Place place) async {
-    final nowFav = await FavoritesStorage.toggleFavorite(place.id);
-    await AnalyticsService.logFavorite(place.id, nowFav);
-    setState(() {});
-  }
-
-  // ------------------- Categories (exact by primaryType) -------------------
-
-  static const Map<String, Set<String>> _categoryToPrimaryTypes = {
-    "Culture": {"museum", "art_gallery", "historical_landmark"},
-    "Museum": {"museum"},
-    "Nature": {"park", "hiking_area"},
-    "Attraction": {"tourist_attraction", "amusement_park", "zoo", "aquarium"},
-    "Shopping": {"shopping_mall"},
-    "Food": {"restaurant", "cafe"},
-    "Restaurant": {"restaurant"},
-    "Cafe": {"cafe"},
-    // Derived but still exact (based on primaryType)
-    "Indoor": {"museum", "art_gallery", "shopping_mall", "aquarium"},
-  };
-
-  List<String> _buildCategories() {
-    final present = _plan.map((p) => p.primaryType).whereType<String>().toSet();
-
-    final cats = <String>["All"];
-
-    // Add category if ANY of its primaryTypes is present
-    for (final entry in _categoryToPrimaryTypes.entries) {
-      if (entry.value.any(present.contains)) {
-        cats.add(entry.key);
+    for (final cat in _mainCategoriesForAll) {
+      final pool = _categoryPools[cat] ?? const <Place>[];
+      int added = 0;
+      for (final p in pool) {
+        if (used.contains(p.id)) continue;
+        out.add(p);
+        used.add(p.id);
+        added++;
+        if (added >= _takeFromEachToAll) break;
       }
     }
 
-    // Stable order preference
+    return out;
+  }
+
+  // ------------------- Tabs -------------------
+
+  List<String> _tabs() {
+    final out = <String>["All"];
+
+    // zobraz jen ty kategorie, které mají něco v poolu
     final preferred = [
-      "All",
       "Culture",
       "Museum",
       "Nature",
       "Attraction",
+      "Castles",
       "Food",
       "Restaurant",
       "Cafe",
@@ -209,34 +255,60 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       "Shopping",
     ];
 
-    final out = <String>[];
-    for (final p in preferred) {
-      if (cats.contains(p)) out.add(p);
+    for (final k in preferred) {
+      final pool = _categoryPools[k];
+      if (pool != null && pool.isNotEmpty) out.add(k);
     }
-    for (final c in cats) {
-      if (!out.contains(c)) out.add(c);
-    }
+
     return out;
   }
 
-  List<Place> _filteredPlan() {
-    if (_selectedCategory == "All") return _plan;
-
-    final allowed = _categoryToPrimaryTypes[_selectedCategory];
-    if (allowed == null || allowed.isEmpty) return _plan;
-
-    return _plan.where((p) => p.primaryType != null && allowed.contains(p.primaryType)).toList();
+  List<Place> _currentList() {
+    if (_selectedTab == "All") return _allPlan;
+    return _categoryPools[_selectedTab] ?? const <Place>[];
   }
 
-  Set<String>? _allowedForCurrentCategory() {
-    if (_selectedCategory == "All") return null;
-    return _categoryToPrimaryTypes[_selectedCategory];
+  // ------------------- Actions: All -------------------
+
+  Set<String> _allIds() => _allPlan.map((p) => p.id).toSet();
+
+  Future<void> _removeFromAllById(String id) async {
+    setState(() {
+      _allPlan.removeWhere((p) => p.id == id);
+    });
+    await AnalyticsService.logRemove(id);
+    await PlanStorage.savePlan(_allPlan);
   }
 
-  // ------------------- Replace flow (sorted by distance) -------------------
+  Future<void> _toggleDoneInAllById(String id) async {
+    final idx = _allPlan.indexWhere((p) => p.id == id);
+    if (idx == -1) return;
+    final current = _allPlan[idx];
+    setState(() {
+      _allPlan[idx] = current.copyWith(done: !current.done);
+    });
+    await PlanStorage.savePlan(_allPlan);
+  }
 
-  Future<void> _openReplaceFor(Place current) async {
+  void _reorderAll(int oldIndex, int newIndex) async {
+    if (_selectedTab != "All") return;
+
+    setState(() {
+      if (newIndex > oldIndex) newIndex -= 1;
+      final item = _allPlan.removeAt(oldIndex);
+      _allPlan.insert(newIndex, item);
+    });
+    await PlanStorage.savePlan(_allPlan);
+  }
+
+  // ✅ Replace: otevře seznam z té samé kategorie (dle primaryType config), řazený dle km
+  Future<void> _openReplaceForAllItem(Place current) async {
     if (_pos == null) return;
+
+    final cat = _categoryForPlace(current);
+    final candidates = (_categoryPools[cat] ?? const <Place>[])
+        .where((p) => p.id != current.id)
+        .toList();
 
     final selected = await showModalBottomSheet<Place>(
       context: context,
@@ -245,35 +317,105 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (_) => ReplaceSheet(
-        places: _places,
+        title: "Replace ($cat)",
         originLat: _pos!.latitude,
         originLng: _pos!.longitude,
-        excludeIds: _excludeIds(),
-        allowedPrimaryTypes: _allowedForCurrentCategory(),
+        currentId: current.id,
+        allIds: _allIds(),
+        candidates: candidates,
       ),
     );
 
     if (selected == null) return;
 
     setState(() {
-      final idx = _plan.indexWhere((p) => p.id == current.id);
-      if (idx != -1) _plan[idx] = selected;
+      final idx = _allPlan.indexWhere((p) => p.id == current.id);
+      if (idx != -1) _allPlan[idx] = selected;
     });
 
     await AnalyticsService.logReplace(current.id);
-    await PlanStorage.savePlan(_plan);
+    await PlanStorage.savePlan(_allPlan);
   }
 
-  void _reorderAll(int oldIndex, int newIndex) async {
-    if (_selectedCategory != "All") return;
+  String _categoryForPlace(Place p) {
+    final pt = (p.primaryType ?? "").trim();
+    if (pt.isEmpty) return "Attraction";
+
+    // projdi config a vrať první match
+    for (final entry in _categoryConfig.entries) {
+      final cat = entry.key;
+      final cfg = entry.value;
+
+      // “subkategorie” nechceme jako hlavní zdroj pro replace v All
+      // Replace má jít do logické hlavní kategorie
+      if (!_mainCategoriesForAll.contains(cat) && cat != "Castles") continue;
+
+      if (cfg.includedTypes.contains(pt)) return cat;
+    }
+
+    // fallback: food vs ostatní
+    if (_categoryConfig["Food"]!.includedTypes.contains(pt)) return "Food";
+    return "Attraction";
+  }
+
+  // ------------------- Actions: Category pools -------------------
+
+  Future<void> _addToAll(Place p) async {
+    if (_allPlan.any((x) => x.id == p.id)) return;
+
+    setState(() => _allPlan.add(p));
+    await PlanStorage.savePlan(_allPlan);
+  }
+
+  Future<void> _toggleFavorite(Place place) async {
+    final nowFav = await FavoritesStorage.toggleFavorite(place.id);
+    await AnalyticsService.logFavorite(place.id, nowFav);
+    setState(() {});
+  }
+
+  // ------------------- Share / refresh -------------------
+
+  Future<void> _shareAll() async {
+    final lines = _allPlan.map((p) => "- ${p.name} (${p.primaryType ?? ""})").join("\n");
+    final text = "My Tripco Day Plan ☀️\n\n$lines";
+    await AnalyticsService.logShare(_allPlan.length);
+    await Share.share(text);
+  }
+
+  Future<void> _refreshEverything() async {
+    if (_pos == null) return;
 
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
-      final item = _plan.removeAt(oldIndex);
-      _plan.insert(newIndex, item);
+      _loading = true;
+      _error = null;
+      _selectedTab = "All";
     });
-    await PlanStorage.savePlan(_plan);
+
+    try {
+      // znovu načti katalogy
+      await _loadCategoryPools();
+
+      // reset All = 3 z každé
+      _allPlan = _buildInitialAllFromPools();
+      await PlanStorage.savePlan(_allPlan);
+
+      setState(() {
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
+    }
   }
+
+  Future<void> _startFresh() async {
+    await PlanStorage.clearPlan();
+    await _refreshEverything();
+  }
+
+  // ------------------- UI -------------------
 
   @override
   Widget build(BuildContext context) {
@@ -293,8 +435,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       );
     }
 
-    final categories = _buildCategories();
-    final filtered = _filteredPlan();
+    final tabs = _tabs();
+    final list = _currentList();
 
     return Scaffold(
       appBar: AppBar(
@@ -304,12 +446,12 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
           IconButton(
             icon: const Icon(Icons.ios_share),
             tooltip: s.share,
-            onPressed: _sharePlan,
+            onPressed: _shareAll,
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: s.refresh,
-            onPressed: _refreshAll,
+            onPressed: _refreshEverything,
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -320,24 +462,23 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       ),
       body: Column(
         children: [
-          _SummaryBar(count: filtered.length),
+          // ✅ vždy počítat All
+          _SummaryBar(count: _allPlan.length),
 
           SizedBox(
             height: 44,
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               scrollDirection: Axis.horizontal,
-              itemCount: categories.length,
+              itemCount: tabs.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, i) {
-                final c = categories[i];
-                final selected = c == _selectedCategory;
+                final t = tabs[i];
+                final selected = t == _selectedTab;
                 return ChoiceChip(
-                  label: Text(c),
+                  label: Text(t),
                   selected: selected,
-                  onSelected: (_) {
-                    setState(() => _selectedCategory = c);
-                  },
+                  onSelected: (_) => setState(() => _selectedTab = t),
                 );
               },
             ),
@@ -346,13 +487,13 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
           const SizedBox(height: 6),
 
           Expanded(
-            child: _selectedCategory == "All"
+            child: _selectedTab == "All"
                 ? ReorderableListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: filtered.length,
+              itemCount: list.length,
               onReorder: _reorderAll,
               itemBuilder: (context, i) {
-                final place = filtered[i];
+                final place = list[i];
                 final isFav = FavoritesStorage.isFavorite(place.id);
 
                 return PlaceCard(
@@ -361,20 +502,25 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                   originLat: _pos!.latitude,
                   originLng: _pos!.longitude,
                   routes: _routes,
-                  onRemove: () => _removeById(place.id),
-                  onReplace: () => _openReplaceFor(place),
-                  onToggleDone: () => _toggleDoneById(place.id),
+                  // ✅ All má delete/replace
+                  onRemove: () => _removeFromAllById(place.id),
+                  onReplace: () => _openReplaceForAllItem(place),
+                  onToggleDone: () => _toggleDoneInAllById(place.id),
                   isFavorite: isFav,
                   onToggleFavorite: () => _toggleFavorite(place),
+                  // ✅ v All není add
+                  onAddToAll: null,
                 );
               },
             )
                 : ListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: filtered.length,
+              itemCount: list.length,
               itemBuilder: (context, i) {
-                final place = filtered[i];
+                final place = list[i];
                 final isFav = FavoritesStorage.isFavorite(place.id);
+
+                final alreadyInAll = _allPlan.any((x) => x.id == place.id);
 
                 return PlaceCard(
                   key: ValueKey(place.id),
@@ -382,11 +528,13 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                   originLat: _pos!.latitude,
                   originLng: _pos!.longitude,
                   routes: _routes,
-                  onRemove: () => _removeById(place.id),
-                  onReplace: () => _openReplaceFor(place),
-                  onToggleDone: () => _toggleDoneById(place.id),
+                  // ✅ v kategorii NEJSOU delete/replace, jen add
+                  onRemove: () {}, // nebude se zobrazovat (viz PlaceCard úprava)
+                  onReplace: () {},
+                  onToggleDone: () {}, // done dává smysl jen v All
                   isFavorite: isFav,
                   onToggleFavorite: () => _toggleFavorite(place),
+                  onAddToAll: alreadyInAll ? null : () => _addToAll(place),
                 );
               },
             ),
@@ -396,6 +544,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     );
   }
 }
+
+// ------------------- Summary bar -------------------
 
 class _SummaryBar extends StatelessWidget {
   final int count;
@@ -420,3 +570,24 @@ class _SummaryBar extends StatelessWidget {
     );
   }
 }
+
+// ------------------- Helpers -------------------
+
+class _CategoryConfig {
+  final Set<String> includedTypes;
+  final int radiusMeters;
+  const _CategoryConfig({required this.includedTypes, required this.radiusMeters});
+}
+
+double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
+  const r = 6371000.0;
+  final dLat = _degToRad(lat2 - lat1);
+  final dLon = _degToRad(lon2 - lon1);
+  final a = (sin(dLat / 2) * sin(dLat / 2)) +
+      cos(_degToRad(lat1)) * cos(_degToRad(lat2)) * (sin(dLon / 2) * sin(dLon / 2));
+  final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+  return r * c;
+}
+
+double _degToRad(double d) => d * (pi / 180.0);
+
