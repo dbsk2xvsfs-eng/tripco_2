@@ -42,6 +42,7 @@ class RoutesService {
     required double destLng,
     required RouteTravelMode mode,
   }) async {
+    print("ROUTE REQ mode=$mode origin=$originLat,$originLng dest=$destLat,$destLng");
     final url = Uri.parse("https://routes.googleapis.com/directions/v2:computeRoutes");
 
     final headers = {
@@ -62,13 +63,16 @@ class RoutesService {
     };
 
     final resp = await http.post(url, headers: headers, body: jsonEncode(body));
+    print("ROUTES RAW RESPONSE: ${resp.body}");
     if (resp.statusCode != 200) {
       throw Exception("Routes API error ${resp.statusCode}: ${resp.body}");
     }
 
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final routes = (data["routes"] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    if (routes.isEmpty) throw Exception("No routes found");
+    if (routes.isEmpty) {
+      return RouteResult(distanceMeters: 0, durationSeconds: 0);
+    }
 
     final r0 = routes.first;
     final distanceMeters = (r0["distanceMeters"] as num?)?.toInt() ?? 0;

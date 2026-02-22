@@ -71,9 +71,9 @@ class RecommendationService {
   List<String> _typesForProfile(UserProfile p) {
     switch (p) {
       case UserProfile.solo:
-        return ["museum", "art_gallery", "historical_landmark", "viewpoint", "park", "tourist_attraction"];
+        return ["museum", "art_gallery", "historical_landmark", "park", "tourist_attraction"];
       case UserProfile.couple:
-        return ["viewpoint", "park", "tourist_attraction", "museum", "art_gallery"];
+        return ["park", "tourist_attraction", "museum", "art_gallery"];
       case UserProfile.family:
         return ["park", "tourist_attraction", "museum", "shopping_mall"];
       case UserProfile.kids:
@@ -89,7 +89,7 @@ class RecommendationService {
       return ["museum", "art_gallery", "historical_landmark", "tourist_attraction"];
     }
     if (playfulType.contains("View")) {
-      return ["viewpoint", "tourist_attraction", "park"];
+      return ["tourist_attraction", "park"];
     }
     if (playfulType.contains("Attraction")) {
       return ["amusement_park", "zoo", "aquarium", "tourist_attraction"];

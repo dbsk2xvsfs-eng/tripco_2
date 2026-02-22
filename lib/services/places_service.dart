@@ -21,7 +21,6 @@ class PlacesService {
       "amusement_park",
       "shopping_mall",
       "historical_landmark",
-      "viewpoint",
     ],
   }) async {
     final url = Uri.parse("https://places.googleapis.com/v1/places:searchNearby");

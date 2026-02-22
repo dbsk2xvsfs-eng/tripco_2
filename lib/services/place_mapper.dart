@@ -10,8 +10,6 @@ class PlaceMapper {
       case "art_gallery":
       case "historical_landmark":
         return "🏛️ Culture";
-      case "viewpoint":
-        return "🌅 View";
       case "amusement_park":
       case "zoo":
       case "aquarium":
