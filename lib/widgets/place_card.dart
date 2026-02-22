@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../i18n/strings.dart';
 import '../models/place.dart';
 import '../services/routes_service.dart';
@@ -11,16 +13,20 @@ class PlaceCard extends StatelessWidget {
   final double originLng;
   final RoutesService routes;
 
-  final VoidCallback onRemove;
-  final VoidCallback onReplace;
-  final VoidCallback onToggleDone;
+  /// ALL actions
+  final VoidCallback? onRemove;
+  final VoidCallback? onReplace;
+  final VoidCallback? onToggleDone;
+
+  /// Category action
+  final VoidCallback? onAddToAll;
 
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
 
-  // ✅ když není null -> jsme v kategorii a zobrazíme Add to All,
-  // a zároveň schováme Replace/Delete/Done.
-  final VoidCallback? onAddToAll;
+  /// If true => Category mode (only "Add to All")
+  /// If false => All mode (navigate/replace/remove/mark done)
+  final bool categoryMode;
 
   const PlaceCard({
     super.key,
@@ -28,19 +34,36 @@ class PlaceCard extends StatelessWidget {
     required this.originLat,
     required this.originLng,
     required this.routes,
-    required this.onRemove,
-    required this.onReplace,
-    required this.onToggleDone,
     required this.isFavorite,
     required this.onToggleFavorite,
+    this.onRemove,
+    this.onReplace,
+    this.onToggleDone,
     this.onAddToAll,
+    this.categoryMode = false,
   });
+
+  Future<void> _openWebsite(BuildContext context) async {
+    final url = (place.websiteUrl ?? "").trim();
+    if (url.isEmpty) return;
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not open website")),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
 
-    final isCatalogMode = onAddToAll != null || (onAddToAll == null && false);
+    final website = (place.websiteUrl ?? "").trim();
+    final hasWebsite = website.isNotEmpty;
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -50,16 +73,19 @@ class PlaceCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // title
             Text(
               place.name,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                decoration: (!isCatalogMode && place.done) ? TextDecoration.lineThrough : null,
-                color: (!isCatalogMode && place.done) ? Colors.grey : null,
+                decoration: place.done ? TextDecoration.lineThrough : null,
+                color: place.done ? Colors.grey : null,
               ),
             ),
             const SizedBox(height: 6),
+
+            // type / open / rating
             Row(
               children: [
                 Text(place.type),
@@ -70,13 +96,31 @@ class PlaceCard extends StatelessWidget {
               ],
             ),
 
+            // ✅ WWW row (replaces "Entry: Unknown" everywhere)
+            if (hasWebsite) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(Icons.public, size: 18, color: Colors.grey.shade700),
+                  const SizedBox(width: 8),
+                  Text("${s.entry}:", style: TextStyle(color: Colors.grey.shade800)),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    onPressed: () => _openWebsite(context),
+                    icon: const Icon(Icons.open_in_new),
+                    tooltip: "Open website",
+                  ),
+                  const Spacer(),
+                ],
+              ),
+            ],
+
             const SizedBox(height: 10),
 
-            // ✅ Entry řádek už řešíš přes website ikonku (pokud existuje) -> tady nic nezobrazujeme
-
+            // top row: Mark done + Favorite (ALL mode only has Mark done)
             Row(
               children: [
-                if (!isCatalogMode)
+                if (!categoryMode)
                   GestureDetector(
                     onTap: onToggleDone,
                     child: Container(
@@ -88,28 +132,29 @@ class PlaceCard extends StatelessWidget {
                       child: Text(place.done ? s.done : s.markDone),
                     ),
                   ),
-                if (!isCatalogMode) const Spacer(),
+                if (!categoryMode) const Spacer(),
 
-                if (isCatalogMode)
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: onAddToAll,
-                      child: Text(onAddToAll == null ? "Added" : "Add to All"),
-                    ),
-                  ),
-
-                if (!isCatalogMode)
-                  IconButton(
-                    onPressed: onToggleFavorite,
-                    icon: Icon(isFavorite ? Icons.star : Icons.star_border),
-                    tooltip: isFavorite ? s.saved : s.unsaved,
-                  ),
+                IconButton(
+                  onPressed: onToggleFavorite,
+                  icon: Icon(isFavorite ? Icons.star : Icons.star_border),
+                  tooltip: isFavorite ? s.saved : s.unsaved,
+                ),
               ],
             ),
 
             const SizedBox(height: 10),
 
-            if (!isCatalogMode)
+            // bottom actions: ALL vs CATEGORY
+            if (categoryMode) ...[
+              // CATEGORY: Add to All only
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: onAddToAll,
+                  child: const Text("Add to All"),
+                ),
+              ),
+            ] else ...[
               Row(
                 children: [
                   Expanded(
@@ -147,6 +192,7 @@ class PlaceCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ],
           ],
         ),
       ),

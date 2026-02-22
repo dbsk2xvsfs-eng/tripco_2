@@ -80,7 +80,7 @@ class RecommendationService {
       case UserProfile.couple:
         return ["park", "tourist_attraction", "museum", "art_gallery"];
       case UserProfile.family:
-        return ["park", "tourist_attraction", "museum", "shopping_mall"];
+        return ["park", "tourist_attraction", "museum"];
       case UserProfile.kids:
         return ["zoo", "aquarium", "amusement_park", "park", "tourist_attraction"];
     }

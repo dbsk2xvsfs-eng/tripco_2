@@ -18,8 +18,6 @@ class PlaceMapper {
       case "tourist_attraction":
         return "🎡 Attraction";
 
-      case "shopping_mall":
-        return "🛍️ Spot";
 
       case "restaurant":
       case "cafe":

@@ -19,7 +19,6 @@ class PlacesService {
       "zoo",
       "aquarium",
       "amusement_park",
-      "shopping_mall",
       "historical_landmark",
       "restaurant",
       "cafe",
