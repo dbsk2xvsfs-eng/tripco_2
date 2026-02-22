@@ -6,16 +6,25 @@ class PlaceMapper {
       case "park":
       case "hiking_area":
         return "🌳 Nature";
+
       case "museum":
       case "art_gallery":
       case "historical_landmark":
         return "🏛️ Culture";
+
       case "amusement_park":
       case "zoo":
       case "aquarium":
+      case "tourist_attraction":
         return "🎡 Attraction";
+
       case "shopping_mall":
         return "🛍️ Spot";
+
+      case "restaurant":
+      case "cafe":
+        return "🍽️ Food";
+
       default:
         return "✨ Spot";
     }
@@ -36,21 +45,20 @@ class PlaceMapper {
     final rating = (p["rating"] as num?)?.toDouble();
     final userRatingCount = (p["userRatingCount"] as num?)?.toInt();
     final openNow = p["currentOpeningHours"]?["openNow"] as bool?;
-
-    // 🔥 NOVÉ – načteme websiteUri z Places API (v1)
     final websiteUrl = p["websiteUri"]?.toString();
 
     return Place(
       id: id,
       name: displayName,
       type: playfulTypeFromPrimary(primaryType),
+      primaryType: primaryType,
       distanceMinutes: distanceMinutes,
       lat: lat,
       lng: lng,
       rating: rating,
       userRatingsTotal: userRatingCount,
       openNow: openNow,
-      websiteUrl: websiteUrl, // 👈 přidáno
+      websiteUrl: websiteUrl,
       done: false,
     );
   }

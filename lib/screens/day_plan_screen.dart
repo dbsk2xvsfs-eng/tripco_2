@@ -15,6 +15,7 @@ import '../services/recommendation_service.dart';
 import '../services/routes_service.dart';
 
 import '../widgets/place_card.dart';
+import '../widgets/replace_sheet.dart';
 
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
@@ -30,13 +31,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
   late final RecommendationService _rec;
   late final RoutesService _routes;
+  late final PlacesService _places;
 
   List<Place> _plan = [];
 
-  // Profile selection removed completely — keep a fixed profile for plan generation.
   static const UserProfile _fixedProfile = UserProfile.solo;
-
   static const _apiKey = String.fromEnvironment('GOOGLE_API_KEY');
+
+  String _selectedCategory = "All";
 
   @override
   void initState() {
@@ -50,7 +52,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       return;
     }
 
-    _rec = RecommendationService(places: PlacesService(apiKey: _apiKey));
+    _places = PlacesService(apiKey: _apiKey);
+    _rec = RecommendationService(places: _places);
     _routes = RoutesService(apiKey: _apiKey);
 
     _init();
@@ -119,6 +122,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
         _plan = plan;
         _loading = false;
         _error = null;
+        _selectedCategory = "All";
       });
     } catch (e) {
       setState(() {
@@ -134,77 +138,26 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   }
 
   Future<void> _sharePlan() async {
-    final lines = _plan.map((p) => "- ${p.name} ${p.type}").join("\n");
+    final lines = _plan.map((p) => "- ${p.name} (${p.primaryType ?? ""})").join("\n");
     final text = "My Tripco Day Plan ☀️\n\n$lines";
     await AnalyticsService.logShare(_plan.length);
     await Share.share(text);
   }
 
-  void _removeAt(int index) async {
-    final id = _plan[index].id;
+  void _removeById(String id) async {
     setState(() {
-      _plan.removeAt(index);
+      _plan.removeWhere((p) => p.id == id);
     });
     await AnalyticsService.logRemove(id);
     await PlanStorage.savePlan(_plan);
-
-    // Removed snackbar removed (it was popping "Removed" repeatedly).
   }
 
-  Future<void> _replaceAt(int index) async {
-    if (_pos == null) return;
-
-    final s = S.of(context);
-    final current = _plan[index];
-
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.finding)));
-
-    try {
-      final replacement = await _rec.replaceOne(
-        lat: _pos!.latitude,
-        lng: _pos!.longitude,
-        profile: _fixedProfile,
-        current: current,
-        excludeIds: _excludeIds(),
-      );
-
-      if (replacement == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.noReplacement)));
-        }
-        return;
-      }
-
-      setState(() {
-        _plan[index] = replacement;
-      });
-
-      await AnalyticsService.logReplace(current.id);
-      await PlanStorage.savePlan(_plan);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.replaced)));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Replace failed: $e")));
-      }
-    }
-  }
-
-  void _reorder(int oldIndex, int newIndex) async {
+  void _toggleDoneById(String id) async {
+    final idx = _plan.indexWhere((p) => p.id == id);
+    if (idx == -1) return;
+    final current = _plan[idx];
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
-      final item = _plan.removeAt(oldIndex);
-      _plan.insert(newIndex, item);
-    });
-    await PlanStorage.savePlan(_plan);
-  }
-
-  void _toggleDone(int index) async {
-    final current = _plan[index];
-    setState(() {
-      _plan[index] = current.copyWith(done: !current.done);
+      _plan[idx] = current.copyWith(done: !current.done);
     });
     await PlanStorage.savePlan(_plan);
   }
@@ -213,6 +166,113 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     final nowFav = await FavoritesStorage.toggleFavorite(place.id);
     await AnalyticsService.logFavorite(place.id, nowFav);
     setState(() {});
+  }
+
+  // ------------------- Categories (exact by primaryType) -------------------
+
+  static const Map<String, Set<String>> _categoryToPrimaryTypes = {
+    "Culture": {"museum", "art_gallery", "historical_landmark"},
+    "Museum": {"museum"},
+    "Nature": {"park", "hiking_area"},
+    "Attraction": {"tourist_attraction", "amusement_park", "zoo", "aquarium"},
+    "Shopping": {"shopping_mall"},
+    "Food": {"restaurant", "cafe"},
+    "Restaurant": {"restaurant"},
+    "Cafe": {"cafe"},
+    // Derived but still exact (based on primaryType)
+    "Indoor": {"museum", "art_gallery", "shopping_mall", "aquarium"},
+  };
+
+  List<String> _buildCategories() {
+    final present = _plan.map((p) => p.primaryType).whereType<String>().toSet();
+
+    final cats = <String>["All"];
+
+    // Add category if ANY of its primaryTypes is present
+    for (final entry in _categoryToPrimaryTypes.entries) {
+      if (entry.value.any(present.contains)) {
+        cats.add(entry.key);
+      }
+    }
+
+    // Stable order preference
+    final preferred = [
+      "All",
+      "Culture",
+      "Museum",
+      "Nature",
+      "Attraction",
+      "Food",
+      "Restaurant",
+      "Cafe",
+      "Indoor",
+      "Shopping",
+    ];
+
+    final out = <String>[];
+    for (final p in preferred) {
+      if (cats.contains(p)) out.add(p);
+    }
+    for (final c in cats) {
+      if (!out.contains(c)) out.add(c);
+    }
+    return out;
+  }
+
+  List<Place> _filteredPlan() {
+    if (_selectedCategory == "All") return _plan;
+
+    final allowed = _categoryToPrimaryTypes[_selectedCategory];
+    if (allowed == null || allowed.isEmpty) return _plan;
+
+    return _plan.where((p) => p.primaryType != null && allowed.contains(p.primaryType)).toList();
+  }
+
+  Set<String>? _allowedForCurrentCategory() {
+    if (_selectedCategory == "All") return null;
+    return _categoryToPrimaryTypes[_selectedCategory];
+  }
+
+  // ------------------- Replace flow (sorted by distance) -------------------
+
+  Future<void> _openReplaceFor(Place current) async {
+    if (_pos == null) return;
+
+    final selected = await showModalBottomSheet<Place>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) => ReplaceSheet(
+        places: _places,
+        originLat: _pos!.latitude,
+        originLng: _pos!.longitude,
+        excludeIds: _excludeIds(),
+        allowedPrimaryTypes: _allowedForCurrentCategory(),
+      ),
+    );
+
+    if (selected == null) return;
+
+    setState(() {
+      final idx = _plan.indexWhere((p) => p.id == current.id);
+      if (idx != -1) _plan[idx] = selected;
+    });
+
+    await AnalyticsService.logReplace(current.id);
+    await PlanStorage.savePlan(_plan);
+  }
+
+  void _reorderAll(int oldIndex, int newIndex) async {
+    if (_selectedCategory != "All") return;
+
+    setState(() {
+      if (newIndex > oldIndex) newIndex -= 1;
+      final item = _plan.removeAt(oldIndex);
+      _plan.insert(newIndex, item);
+    });
+    await PlanStorage.savePlan(_plan);
   }
 
   @override
@@ -232,6 +292,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
         body: Center(child: Text(_error!)),
       );
     }
+
+    final categories = _buildCategories();
+    final filtered = _filteredPlan();
 
     return Scaffold(
       appBar: AppBar(
@@ -257,14 +320,39 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       ),
       body: Column(
         children: [
-          _SummaryBar(count: _plan.length),
-          Expanded(
-            child: ReorderableListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: _plan.length,
-              onReorder: _reorder,
+          _SummaryBar(count: filtered.length),
+
+          SizedBox(
+            height: 44,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              scrollDirection: Axis.horizontal,
+              itemCount: categories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, i) {
-                final place = _plan[i];
+                final c = categories[i];
+                final selected = c == _selectedCategory;
+                return ChoiceChip(
+                  label: Text(c),
+                  selected: selected,
+                  onSelected: (_) {
+                    setState(() => _selectedCategory = c);
+                  },
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          Expanded(
+            child: _selectedCategory == "All"
+                ? ReorderableListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: filtered.length,
+              onReorder: _reorderAll,
+              itemBuilder: (context, i) {
+                final place = filtered[i];
                 final isFav = FavoritesStorage.isFavorite(place.id);
 
                 return PlaceCard(
@@ -273,9 +361,30 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                   originLat: _pos!.latitude,
                   originLng: _pos!.longitude,
                   routes: _routes,
-                  onRemove: () => _removeAt(i),
-                  onReplace: () => _replaceAt(i),
-                  onToggleDone: () => _toggleDone(i),
+                  onRemove: () => _removeById(place.id),
+                  onReplace: () => _openReplaceFor(place),
+                  onToggleDone: () => _toggleDoneById(place.id),
+                  isFavorite: isFav,
+                  onToggleFavorite: () => _toggleFavorite(place),
+                );
+              },
+            )
+                : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: filtered.length,
+              itemBuilder: (context, i) {
+                final place = filtered[i];
+                final isFav = FavoritesStorage.isFavorite(place.id);
+
+                return PlaceCard(
+                  key: ValueKey(place.id),
+                  place: place,
+                  originLat: _pos!.latitude,
+                  originLng: _pos!.longitude,
+                  routes: _routes,
+                  onRemove: () => _removeById(place.id),
+                  onReplace: () => _openReplaceFor(place),
+                  onToggleDone: () => _toggleDoneById(place.id),
                   isFavorite: isFav,
                   onToggleFavorite: () => _toggleFavorite(place),
                 );
@@ -297,7 +406,7 @@ class _SummaryBar extends StatelessWidget {
     final s = S.of(context);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

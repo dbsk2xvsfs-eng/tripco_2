@@ -2,7 +2,12 @@ class Place {
   final String id;
 
   final String name;
+
+  /// Playful label (e.g. "🏛️ Culture")
   final String type;
+
+  /// Exact Google Places primaryType (e.g. "museum", "restaurant", "cafe", ...)
+  final String? primaryType;
 
   final int distanceMinutes;
 
@@ -13,7 +18,8 @@ class Place {
   final int? userRatingsTotal;
   final bool? openNow;
 
-  final String? websiteUrl; // ✅ NOVÉ
+  /// Website (from places.websiteUri)
+  final String? websiteUrl;
 
   final bool done;
 
@@ -24,10 +30,11 @@ class Place {
     required this.distanceMinutes,
     required this.lat,
     required this.lng,
+    this.primaryType,
     this.rating,
     this.userRatingsTotal,
     this.openNow,
-    this.websiteUrl, // ✅ NOVÉ
+    this.websiteUrl,
     this.done = false,
   });
 
@@ -35,6 +42,7 @@ class Place {
     String? id,
     String? name,
     String? type,
+    String? primaryType,
     int? distanceMinutes,
     double? lat,
     double? lng,
@@ -48,6 +56,7 @@ class Place {
       id: id ?? this.id,
       name: name ?? this.name,
       type: type ?? this.type,
+      primaryType: primaryType ?? this.primaryType,
       distanceMinutes: distanceMinutes ?? this.distanceMinutes,
       lat: lat ?? this.lat,
       lng: lng ?? this.lng,
@@ -64,13 +73,14 @@ class Place {
       "id": id,
       "name": name,
       "type": type,
+      "primaryType": primaryType,
       "distanceMinutes": distanceMinutes,
       "lat": lat,
       "lng": lng,
       "rating": rating,
       "userRatingsTotal": userRatingsTotal,
       "openNow": openNow,
-      "websiteUrl": websiteUrl, // ✅ NOVÉ
+      "websiteUrl": websiteUrl,
       "done": done,
     };
   }
@@ -80,13 +90,14 @@ class Place {
       id: (m["id"] ?? "").toString(),
       name: (m["name"] ?? "").toString(),
       type: (m["type"] ?? "✨ Spot").toString(),
+      primaryType: m["primaryType"]?.toString(),
       distanceMinutes: (m["distanceMinutes"] as num?)?.toInt() ?? 10,
       lat: (m["lat"] as num?)?.toDouble() ?? 0.0,
       lng: (m["lng"] as num?)?.toDouble() ?? 0.0,
       rating: (m["rating"] as num?)?.toDouble(),
       userRatingsTotal: (m["userRatingsTotal"] as num?)?.toInt(),
       openNow: m["openNow"] as bool?,
-      websiteUrl: m["websiteUrl"]?.toString(), // ✅ NOVÉ
+      websiteUrl: m["websiteUrl"]?.toString(),
       done: m["done"] as bool? ?? false,
     );
   }

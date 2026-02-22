@@ -21,25 +21,29 @@ class PlacesService {
       "amusement_park",
       "shopping_mall",
       "historical_landmark",
+      "restaurant",
+      "cafe",
     ],
   }) async {
     final url = Uri.parse("https://places.googleapis.com/v1/places:searchNearby");
 
+    // Places API: maxResultCount musí být 1..20
+    final safeMax = maxResults.clamp(1, 20);
+
     final headers = {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
-      // ✅ Added places.websiteUri so we can show a website link for entry info
       "X-Goog-FieldMask":
       "places.id,places.displayName,places.location,places.primaryType,places.rating,places.userRatingCount,places.currentOpeningHours,places.websiteUri",
     };
 
     final body = {
       "includedTypes": includedTypes,
-      "maxResultCount": maxResults,
+      "maxResultCount": safeMax,
       "locationRestriction": {
         "circle": {
           "center": {"latitude": lat, "longitude": lng},
-          "radius": radiusMeters
+          "radius": radiusMeters,
         }
       }
     };
@@ -50,7 +54,6 @@ class PlacesService {
     }
 
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
-    final places = (data["places"] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    return places;
+    return (data["places"] as List?)?.cast<Map<String, dynamic>>() ?? [];
   }
 }
