@@ -42,6 +42,19 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   // ✅ Kategorie = katalog (15 položek), jen Add to All
   final Map<String, List<Place>> _categoryPools = {};
 
+  void _sortAllByDistance() {
+    if (_pos == null) return;
+    final originLat = _pos!.latitude;
+    final originLng = _pos!.longitude;
+
+    _allPlan.sort((a, b) {
+      final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
+      final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
+      return da.compareTo(db);
+    });
+  }
+
+
   String _selectedTab = "All";
 
   static const UserProfile _fixedProfile = UserProfile.solo;
@@ -302,6 +315,18 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
           (_categoryPools[k] ?? const <Place>[]).where((p) => !ids.contains(p.id)).toList();
     }
 
+    // řazení ALL dle vzdálenosti
+    if (_pos != null) {
+      final originLat = _pos!.latitude;
+      final originLng = _pos!.longitude;
+
+      out.sort((a, b) {
+        final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
+        final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
+        return da.compareTo(db);
+      });
+    }
+
     return out;
   }
 
@@ -433,6 +458,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     setState(() {
       _allPlan.removeAt(idx);
       _insertBackToPool(removed);
+      _sortAllByDistance();
     });
 
     await AnalyticsService.logRemove(id);
@@ -456,6 +482,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       if (newIndex > oldIndex) newIndex -= 1;
       final item = _allPlan.removeAt(oldIndex);
       _allPlan.insert(newIndex, item);
+      _sortAllByDistance();
     });
     await PlanStorage.savePlan(_allPlan);
   }
@@ -511,10 +538,12 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       // (b) vybraný selected se má v kategorii zobrazit bez Add (protože už je v ALL)
       // -> stačí, že je v poolu; Add button se vypne přes alreadyInAll logiku v build()
       _upsertIntoPool(selected);
+      _sortAllByDistance();
     });
 
     await AnalyticsService.logReplace(current.id);
     await PlanStorage.savePlan(_allPlan);
+
   }
 
   // ------------------- Actions: Category pools -------------------
@@ -525,6 +554,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
     setState(() {
       _allPlan.add(p);
+      _sortAllByDistance();
     });
 
     await PlanStorage.savePlan(_allPlan);
