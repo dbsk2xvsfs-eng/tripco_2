@@ -150,13 +150,14 @@ class PlaceCard extends StatelessWidget {
 
             // bottom actions: ALL vs CATEGORY
             if (categoryMode) ...[
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: onAddToAll, // null => disabled
-                  child: const Text("Add to All"),
+              if (onAddToAll != null)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: onAddToAll,
+                    child: const Text("Add to All"),
+                  ),
                 ),
-              ),
             ] else ...[
               Row(
                 children: [

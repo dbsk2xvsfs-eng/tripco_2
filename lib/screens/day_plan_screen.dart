@@ -148,8 +148,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
         _allPlan = _buildInitialAllFromPools();
         await PlanStorage.savePlan(_allPlan);
       } else {
-        // ✅ pokud existuje uložené All, odeber ho z poolů (ať se neduplikuje)
-        _removeAllFromPools();
       }
 
       setState(() {
@@ -215,8 +213,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       _categoryPools[key] = out;
     }
 
-    // ✅ po načtení poolů odeber položky, které už jsou v All
-    _removeAllFromPools();
+
   }
 
   void _removeAllFromPools() {
@@ -431,9 +428,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
     setState(() {
       _allPlan.add(p);
-
-      // ✅ remove from ALL pools
-      _removeFromAllPoolsById(p.id);
     });
 
     await PlanStorage.savePlan(_allPlan);
@@ -595,7 +589,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                   originLng: _pos!.longitude,
                   routes: _routes,
                   categoryMode: true,
-                  onAddToAll: () => _addToAllFromCategory(place),
+                  onAddToAll: _allPlan.any((x) => x.id == place.id)
+                      ? null
+                      : () => _addToAllFromCategory(place),
                   isFavorite: isFav,
                   onToggleFavorite: () => _toggleFavorite(place),
                   onRemove: null,
