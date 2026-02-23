@@ -5,28 +5,40 @@ class PlaceMapper {
     switch (primaryType) {
       case "park":
       case "hiking_area":
+      case "landmark":
         return "🌳 Nature";
 
-    // ✅ muzea patří do Museum (ne Culture)
       case "museum":
         return "🏛️ Museum";
 
-    // ✅ Culture = galerie + landmarky (bez muzeí)
       case "art_gallery":
       case "historical_landmark":
-        return "🏛️ Culture";
+      case "library":
+      case "monument":
+      case "bridge":
+      case "cathedral":
+        return "⛪️ Culture";
+
+      case "castle":
+      case "church":
+        return "🏰 Castles";
 
       case "amusement_park":
       case "zoo":
       case "aquarium":
       case "tourist_attraction":
+      case "point_of_interest":
         return "🎡 Attraction";
 
       case "restaurant":
-        return "🍽️ Restaurant";
+        return "🥣 Restaurant";
 
       case "cafe":
         return "☕ Cafe";
+
+    // shopping_mall ignorujeme v celé appce
+      case "shopping_mall":
+        return "✨ Spot";
 
       default:
         return "✨ Spot";

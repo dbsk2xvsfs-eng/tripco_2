@@ -52,10 +52,12 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   // “Hlavní” kategorie, ze kterých se skládá All: 3 z každé
   static const List<String> _mainCategoriesForAll = [
     "Culture",
+    "Castles",
     "Nature",
     "Attraction",
+    "Restaurant",
     "Cafe",
-    "Castles",
+
   ];
 
   // Každá kategorie = přesné Google primaryType (includedTypes)
@@ -66,7 +68,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       radiusMeters: 50000,
     ),
     "Culture": _CategoryConfig(
-      includedTypes: {"art_gallery", "historical_landmark"},
+      includedTypes: {
+        "art_gallery",
+        "historical_landmark",
+        "church",
+        "monument",
+        "bridge",
+        "library",
+      },
       radiusMeters: 50000,
     ),
     "Nature": _CategoryConfig(
@@ -163,9 +172,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     }
   }
 
+
   String _targetCategoryForPrimaryType(String? primaryType) {
     final pt = (primaryType ?? "").trim();
-    if (pt.isEmpty) return "Attraction";
+    if (pt.isEmpty) return "__IGNORE__";
 
     // ❌ shopping_mall úplně ignorujeme v celé appce
     if (pt == "shopping_mall") return "__IGNORE__";
@@ -173,21 +183,36 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     // ✅ UNIQUE mapping (žádné překryvy)
     if (pt == "museum") return "Museum";
 
-    if (pt == "art_gallery" || pt == "historical_landmark") return "Culture";
+    // Castles
+    if (pt == "castle") return "Castles";
 
-    if (pt == "park" || pt == "hiking_area") return "Nature";
-
+    // Food
     if (pt == "cafe") return "Cafe";
     if (pt == "restaurant") return "Restaurant";
 
-    if (pt == "castle") return "Castles";
+    // Nature
+    if (pt == "park" || pt == "hiking_area") return "Nature";
 
+    // Attraction (zábava / “attraction” typy)
     if (pt == "aquarium" || pt == "zoo" || pt == "amusement_park" || pt == "tourist_attraction") {
       return "Attraction";
     }
 
-    // fallback
-    return "Attraction";
+    // ✅ Culture / Landmarks (památky jako Charles Bridge apod.)
+    if (pt == "historical_landmark" ||
+        pt == "art_gallery" ||
+        pt == "church" ||
+        pt == "place_of_worship" ||
+        pt == "monument" ||
+        pt == "landmark" ||
+        pt == "bridge" ||
+        pt == "library" ||
+        pt == "point_of_interest") {
+      return "Culture";
+    }
+
+    // fallback – ať se ti to nemíchá do Attraction
+    return "Culture";
   }
 
 
