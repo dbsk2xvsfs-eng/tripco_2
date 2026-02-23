@@ -62,7 +62,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   // radius podle požadavku (ale request se clampne na max 50 000m)
   static const Map<String, _CategoryConfig> _categoryConfig = {
     "Culture": _CategoryConfig(
-      includedTypes: {"museum", "art_gallery", "historical_landmark"},
+      includedTypes: {"art_gallery", "historical_landmark"},
       radiusMeters: 50000,
     ),
     "Museum": _CategoryConfig(
