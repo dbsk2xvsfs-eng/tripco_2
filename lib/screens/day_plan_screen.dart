@@ -61,12 +61,12 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   // Každá kategorie = přesné Google primaryType (includedTypes)
   // radius podle požadavku (ale request se clampne na max 50 000m)
   static const Map<String, _CategoryConfig> _categoryConfig = {
-    "Culture": _CategoryConfig(
-      includedTypes: {"art_gallery", "historical_landmark"},
-      radiusMeters: 50000,
-    ),
     "Museum": _CategoryConfig(
       includedTypes: {"museum"},
+      radiusMeters: 50000,
+    ),
+    "Culture": _CategoryConfig(
+      includedTypes: {"art_gallery", "historical_landmark"},
       radiusMeters: 50000,
     ),
     "Nature": _CategoryConfig(
@@ -74,7 +74,12 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       radiusMeters: 40000,
     ),
     "Attraction": _CategoryConfig(
-      includedTypes: {"tourist_attraction", "amusement_park", "zoo", "aquarium"},
+      includedTypes: {
+        "tourist_attraction",
+        "amusement_park",
+        "zoo",
+        "aquarium",
+      },
       radiusMeters: 50000,
     ),
     "Restaurant": _CategoryConfig(
@@ -85,13 +90,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       includedTypes: {"cafe"},
       radiusMeters: 15000,
     ),
-    "Indoor": _CategoryConfig(
-      includedTypes: {"museum", "art_gallery", "aquarium"},
-      radiusMeters: 30000,
-    ),
     "Castles": _CategoryConfig(
-      includedTypes: {"castle", "historical_landmark"},
-      radiusMeters: 100000, // požadavek 100km, ale API dovolí max 50km -> clamp níž
+      includedTypes: {"castle"},
+      radiusMeters: 50000,
     ),
   };
 
@@ -219,13 +220,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   }
 
   void _removeAllFromPools() {
-    if (_allPlan.isEmpty) return;
-    final ids = _allPlan.map((p) => p.id).toSet();
-    for (final k in _categoryPools.keys) {
-      _categoryPools[k] = (_categoryPools[k] ?? const <Place>[])
-          .where((p) => !ids.contains(p.id))
-          .toList();
-    }
+    // NIC neodstraňujeme.
+    // Kategorie mají zobrazovat i položky z ALL.
   }
 
   List<Place> _buildInitialAllFromPools() {
@@ -349,28 +345,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   Set<String> _allIds() => _allPlan.map((p) => p.id).toSet();
 
   Future<void> _removeFromAllById(String id) async {
-    final removed = _allPlan.firstWhere((p) => p.id == id, orElse: () => const Place(
-      id: "",
-      name: "",
-      type: "",
-      primaryType: null,
-      distanceMinutes: 0,
-      lat: 0,
-      lng: 0,
-      done: false,
-      rating: null,
-      userRatingsTotal: null,
-      openNow: null,
-      websiteUrl: null,
-    ));
+    final idx = _allPlan.indexWhere((p) => p.id == id);
+    if (idx == -1) return;
+
+    final removed = _allPlan[idx];
 
     setState(() {
-      _allPlan.removeWhere((p) => p.id == id);
-
-      // ✅ VRÁTIT ZPĚT DO POOLU (pokud jsme ho našli)
-      if (removed.id.isNotEmpty) {
-        _insertBackToPool(removed);
-      }
+      _allPlan.removeAt(idx);
+      _insertBackToPool(removed);
     });
 
     await AnalyticsService.logRemove(id);
