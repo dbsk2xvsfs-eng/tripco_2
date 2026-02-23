@@ -163,6 +163,35 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     }
   }
 
+  String _targetCategoryForPrimaryType(String? primaryType) {
+    final pt = (primaryType ?? "").trim();
+    if (pt.isEmpty) return "Attraction";
+
+    // ❌ shopping_mall úplně ignorujeme v celé appce
+    if (pt == "shopping_mall") return "__IGNORE__";
+
+    // ✅ UNIQUE mapping (žádné překryvy)
+    if (pt == "museum") return "Museum";
+
+    if (pt == "art_gallery" || pt == "historical_landmark") return "Culture";
+
+    if (pt == "park" || pt == "hiking_area") return "Nature";
+
+    if (pt == "cafe") return "Cafe";
+    if (pt == "restaurant") return "Restaurant";
+
+    if (pt == "castle") return "Castles";
+
+    if (pt == "aquarium" || pt == "zoo" || pt == "amusement_park" || pt == "tourist_attraction") {
+      return "Attraction";
+    }
+
+    // fallback
+    return "Attraction";
+  }
+
+
+
   // ------------------- Pools (katalog) -------------------
 
   Future<void> _loadCategoryPools() async {
@@ -193,16 +222,22 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
         return PlaceMapper.fromGooglePlace(p, distanceMinutes: minutesSeed);
       })
           .where((x) => x.id.isNotEmpty)
+      // ✅ KLÍČ: nech jen věci, které patří do této kategorie dle JEDINÉ mapy
+          .where((x) {
+        final target = _targetCategoryForPrimaryType(x.primaryType);
+        if (target == "__IGNORE__") return false;
+        return target == key;
+      })
           .toList();
 
-      // řazení dle km (přímá vzdálenost)
+      // ✅ řazení dle vzdálenosti (přímá vzdálenost)
       mapped.sort((a, b) {
         final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
         final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
         return da.compareTo(db);
       });
 
-      // unikáty dle id + take 15
+      // ✅ unikáty dle id + take 15
       final uniq = <String>{};
       final out = <Place>[];
       for (final pl in mapped) {
@@ -212,8 +247,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
       _categoryPools[key] = out;
     }
-
-
   }
 
   void _removeAllFromPools() {
@@ -301,6 +334,31 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     return "Attraction";
   }
 
+  void _upsertIntoPool(Place p) {
+    if (_pos == null) return;
+
+    final cat = _categoryForPlace(p);
+    final originLat = _pos!.latitude;
+    final originLng = _pos!.longitude;
+
+    final list = List<Place>.from(_categoryPools[cat] ?? const <Place>[]);
+
+    // pokud už tam je, jen necháme (nechceme duplikáty)
+    if (!list.any((x) => x.id == p.id)) {
+      list.add(p);
+    }
+
+    // vždy řadit dle km
+    list.sort((a, b) {
+      final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
+      final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
+      return da.compareTo(db);
+    });
+
+    // držíme limit 15 (ale tím pádem může někdy "vypadnout" nejvzdálenější)
+    _categoryPools[cat] = list.take(_poolSize).toList();
+  }
+
   void _insertBackToPool(Place p) {
     if (_pos == null) return;
 
@@ -382,9 +440,22 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
     final cat = _categoryForPlace(current);
 
-    final candidates = (_categoryPools[cat] ?? const <Place>[])
+    // kandidáti z poolu stejné kategorie
+    final candidates = List<Place>.from(_categoryPools[cat] ?? const <Place>[])
+    // neaktuální položka
         .where((p) => p.id != current.id)
+    // nesmí být už v ALL (jinak by se duplicitně objevila v All)
+        .where((p) => !_allPlan.any((x) => x.id == p.id))
         .toList();
+
+    // řazení podle vzdálenosti od GPS
+    final originLat = _pos!.latitude;
+    final originLng = _pos!.longitude;
+    candidates.sort((a, b) {
+      final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
+      final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
+      return da.compareTo(db);
+    });
 
     final selected = await showModalBottomSheet<Place>(
       context: context,
@@ -394,8 +465,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       ),
       builder: (_) => ReplaceSheet(
         title: "Replace ($cat)",
-        originLat: _pos!.latitude,
-        originLng: _pos!.longitude,
+        originLat: originLat,
+        originLng: originLng,
         currentId: current.id,
         allIds: _allIds(),
         candidates: candidates,
@@ -405,15 +476,16 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     if (selected == null) return;
 
     setState(() {
-      // ✅ vyměň v All
       final idx = _allPlan.indexWhere((p) => p.id == current.id);
       if (idx != -1) _allPlan[idx] = selected;
 
-      // ✅ vybraný nesmí zůstat v žádném poolu
-      _removeFromAllPoolsById(selected.id);
+      // ✅ pools se nemažou, ale pro jistotu:
+      // (a) původní current se má "vrátit" do správné kategorie
+      _upsertIntoPool(current);
 
-      // ✅ a původní "current" vrať zpět do poolu (aby se neztratil)
-      _insertBackToPool(current);
+      // (b) vybraný selected se má v kategorii zobrazit bez Add (protože už je v ALL)
+      // -> stačí, že je v poolu; Add button se vypne přes alreadyInAll logiku v build()
+      _upsertIntoPool(selected);
     });
 
     await AnalyticsService.logReplace(current.id);
@@ -565,12 +637,17 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                   originLat: _pos!.latitude,
                   originLng: _pos!.longitude,
                   routes: _routes,
+
+                  // ✅ ALL mode => Navigate / Replace / Remove / Mark done
                   categoryMode: false,
                   onRemove: () => _removeFromAllById(place.id),
                   onReplace: () => _openReplaceForAllItem(place),
                   onToggleDone: () => _toggleDoneInAllById(place.id),
+
                   isFavorite: isFav,
                   onToggleFavorite: () => _toggleFavorite(place),
+
+                  // v ALL žádné Add
                   onAddToAll: null,
                 );
               },
@@ -600,7 +677,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                 );
               },
             ),
-          ),
+          )
         ],
       ),
     );
