@@ -61,6 +61,7 @@ class PlaceMapper {
     final userRatingCount = (p["userRatingCount"] as num?)?.toInt();
     final openNow = p["currentOpeningHours"]?["openNow"] as bool?;
     final websiteUrl = p["websiteUri"]?.toString();
+    final googleMapsUri = p["googleMapsUri"]?.toString();
 
     return Place(
       id: id,
@@ -75,6 +76,7 @@ class PlaceMapper {
       openNow: openNow,
       websiteUrl: websiteUrl,
       done: false,
+      googleMapsUri: googleMapsUri,
     );
   }
 }

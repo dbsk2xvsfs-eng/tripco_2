@@ -3,7 +3,7 @@ class Place {
 
   final String name;
 
-  /// Playful label (e.g. "🏛️ Culture")
+  /// Playful label (e.g. "⛪️ Culture")
   final String type;
 
   /// Exact Google Places primaryType (e.g. "museum", "restaurant", "cafe", ...)
@@ -20,6 +20,7 @@ class Place {
 
   /// Website (from places.websiteUri)
   final String? websiteUrl;
+  final String? googleMapsUri;
 
   final bool done;
 
@@ -36,6 +37,7 @@ class Place {
     this.openNow,
     this.websiteUrl,
     this.done = false,
+    this.googleMapsUri,
   });
 
   Place copyWith({
@@ -51,6 +53,7 @@ class Place {
     bool? openNow,
     String? websiteUrl,
     bool? done,
+    String? googleMapsUri,
   }) {
     return Place(
       id: id ?? this.id,
@@ -65,6 +68,7 @@ class Place {
       openNow: openNow ?? this.openNow,
       websiteUrl: websiteUrl ?? this.websiteUrl,
       done: done ?? this.done,
+      googleMapsUri: googleMapsUri ?? this.googleMapsUri,
     );
   }
 
@@ -82,6 +86,7 @@ class Place {
       "openNow": openNow,
       "websiteUrl": websiteUrl,
       "done": done,
+      "googleMapsUri": googleMapsUri,
     };
   }
 
@@ -99,6 +104,7 @@ class Place {
       openNow: m["openNow"] as bool?,
       websiteUrl: m["websiteUrl"]?.toString(),
       done: m["done"] as bool? ?? false,
+      googleMapsUri: (m["googleMapsUri"] ?? "").toString().isEmpty ? null : (m["googleMapsUri"]).toString(),
     );
   }
 }

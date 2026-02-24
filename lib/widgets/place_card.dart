@@ -69,6 +69,22 @@ class PlaceCard extends StatelessWidget {
   }
 
 
+  Future<void> _openGoogleMapsPlace(BuildContext context) async {
+    final url = (place.googleMapsUri ?? "").trim(); // pokud ti to nesedí, bude to u tebe nejspíš googleMapsUri
+    if (url.isEmpty) return;
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not open Google Maps")),
+      );
+    }
+  }
+
+
   double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
     const r = 6371000.0;
     final dLat = _degToRad(lat2 - lat1);
@@ -96,7 +112,7 @@ class PlaceCard extends StatelessWidget {
     final hasWebsite = website.isNotEmpty;
 
     return Card(
-      color: (accentColor ?? Colors.white).withOpacity(0.06),
+      color: (accentColor ?? Colors.white).withOpacity(0.1),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
@@ -125,14 +141,29 @@ class PlaceCard extends StatelessWidget {
                     style: TextStyle(color: accentColor ?? Colors.black87),
                   ),
                 ),
+
                 if (place.openNow != null) ...[
                   const SizedBox(width: 10),
                   Text(place.openNow! ? s.open : s.closed),
                 ],
+
                 if (place.rating != null) ...[
                   const SizedBox(width: 10),
                   Text("⭐ ${place.rating!.toStringAsFixed(1)}"),
                 ],
+
+                const SizedBox(width: 6),
+
+                // ✅ HORNÍ WWW = Google Maps detail (foto, popis, recenze)
+                if ((place.googleMapsUri ?? "").isNotEmpty)
+                  IconButton(
+                    onPressed: () => _openGoogleMapsPlace(context),
+                    icon: const Icon(Icons.public),
+                    tooltip: "Google Maps",
+                    visualDensity: VisualDensity.compact,
+                  )
+                else
+                  const SizedBox(width: 40),
               ],
             ),
 
@@ -147,6 +178,7 @@ class PlaceCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
 
+                // ✅ spodní WWW = Website (pokud existuje)
                 if (hasWebsite)
                   IconButton(
                     onPressed: () => _openWebsite(context),
@@ -159,7 +191,7 @@ class PlaceCard extends StatelessWidget {
 
                 const SizedBox(width: 6),
 
-                // ✅ Vzdálenost se zobrazí VŽDY
+                // ✅ Vzdálenost vždy
                 Text(
                   _kmText(),
                   style: TextStyle(color: Colors.grey.shade800),

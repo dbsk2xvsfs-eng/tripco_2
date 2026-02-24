@@ -227,7 +227,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   };
 
   static const Map<String, String> _catEmoji = {
-    "Culture": "🏛️",
+    "Culture": "⛪️",
     "Museum": "🏛️",
     "Nature": "🌳",
     "Attraction": "🎡",
