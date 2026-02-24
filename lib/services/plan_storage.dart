@@ -1,109 +1,136 @@
 import 'package:hive/hive.dart';
 import '../models/place.dart';
 
+class SavedPlan {
+  final String city;
+  final double lat;
+  final double lng;
+  final List<Place> plan;
+
+  const SavedPlan({
+    required this.city,
+    required this.lat,
+    required this.lng,
+    required this.plan,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      "city": city,
+      "lat": lat,
+      "lng": lng,
+      "plan": plan.map((p) => p.toMap()).toList(),
+    };
+  }
+
+  static SavedPlan fromMap(Map<dynamic, dynamic> m) {
+    final planRaw = (m["plan"] as List?) ?? const [];
+    final places = planRaw
+        .cast<Map>()
+        .map((x) => Place.fromMap(x))
+        .toList();
+
+    return SavedPlan(
+      city: (m["city"] ?? "").toString(),
+      lat: (m["lat"] as num?)?.toDouble() ?? 0.0,
+      lng: (m["lng"] as num?)?.toDouble() ?? 0.0,
+      plan: places,
+    );
+  }
+}
+
 class PlanStorage {
   static const _boxName = 'tripcoBox';
 
-  /// Aktuální (autosave) plán = vždy se načítá po startu aplikace
-  static const _keyCurrentPlan = 'plan_current_v2';
+  // Current plan (ALL)
+  static const _keyPlan = 'plan_v1';
 
-  /// Archiv uložených plánů (snapshots) – seznam map
-  static const _keySavedPlans = 'plan_saved_list_v2';
+  // Saved plans list
+  static const _keySavedPlans = 'saved_plans_v1';
 
   static Box get _box => Hive.box(_boxName);
 
-  // ---------------------------------------------------------------------------
-  // CURRENT PLAN (autosave)
-  // ---------------------------------------------------------------------------
+  // -----------------------------
+  // CURRENT PLAN (ALL) API
+  // -----------------------------
 
   static Future<void> saveCurrentPlan(List<Place> plan) async {
-    final data = plan.map((p) => p.toMap()).toList();
-    await _box.put(_keyCurrentPlan, data);
+    await savePlan(plan);
   }
 
   static List<Place>? loadCurrentPlan() {
-    final data = _box.get(_keyCurrentPlan);
+    return loadPlan();
+  }
+
+  static Future<void> clearCurrentPlan() async {
+    await clearPlan();
+  }
+
+  // Backwards-compatible names
+  static Future<void> savePlan(List<Place> plan) async {
+    final data = plan.map((p) => p.toMap()).toList();
+    await _box.put(_keyPlan, data);
+  }
+
+  static List<Place>? loadPlan() {
+    final data = _box.get(_keyPlan);
     if (data == null) return null;
 
     final list = (data as List).cast<Map>();
     return list.map((m) => Place.fromMap(m)).toList();
   }
 
-  static Future<void> clearCurrentPlan() async {
-    await _box.delete(_keyCurrentPlan);
+  static Future<void> clearPlan() async {
+    await _box.delete(_keyPlan);
   }
 
-  // ---------------------------------------------------------------------------
-  // SAVED PLANS (snapshots)
-  // ---------------------------------------------------------------------------
+  // -----------------------------
+  // SAVED PLANS (max 5, by city)
+  // -----------------------------
 
-  /// Uloží snapshot aktuálního plánu do archivu "Uloženo".
-  /// cityName může být prázdné – UI si může zobrazit fallback.
-  static Future<void> addSavedPlanSnapshot({
-    required List<Place> plan,
-    required double lat,
-    required double lng,
-    required String cityName,
-  }) async {
-    final saved = loadSavedPlans();
-
-    final snapshot = <String, dynamic>{
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
-      'cityName': cityName,
-      'lat': lat,
-      'lng': lng,
-      'plan': plan.map((p) => p.toMap()).toList(),
-    };
-
-    // přidáme nahoru (nejnovější první)
-    saved.insert(0, snapshot);
-
-    await _box.put(_keySavedPlans, saved);
-  }
-
-  /// Vrátí raw seznam uložených snapshotů (Map).
-  /// Každý prvek obsahuje: id, createdAtMs, cityName, lat, lng, plan(List<Map>)
-  static List<Map<String, dynamic>> loadSavedPlans() {
+  static List<SavedPlan> loadSavedPlans() {
     final data = _box.get(_keySavedPlans);
-    if (data == null) return <Map<String, dynamic>>[];
+    if (data == null) return <SavedPlan>[];
 
     final list = (data as List).cast<Map>();
-    return list.map((m) => Map<String, dynamic>.from(m)).toList();
+    return list.map((m) => SavedPlan.fromMap(m)).where((x) => x.city.trim().isNotEmpty).toList();
   }
 
-  /// Načte konkrétní uložený plán (places) podle id.
-  static List<Place>? loadSavedPlanById(String id) {
-    final saved = loadSavedPlans();
-    final found = saved.cast<Map<String, dynamic>>().firstWhere(
-          (m) => (m['id'] ?? '').toString() == id,
-      orElse: () => <String, dynamic>{},
-    );
+  static Future<void> upsertSavedPlan({
+    required String city,
+    required double lat,
+    required double lng,
+    required List<Place> plan,
+  }) async {
+    final c = city.trim();
+    if (c.isEmpty) return;
 
-    if (found.isEmpty) return null;
+    final items = loadSavedPlans();
 
-    final planData = found['plan'];
-    if (planData is! List) return null;
+    // remove old for same city (case-insensitive)
+    items.removeWhere((x) => x.city.trim().toLowerCase() == c.toLowerCase());
 
-    final list = planData.cast<Map>();
-    return list.map((m) => Place.fromMap(m)).toList();
+    // add new
+    items.add(SavedPlan(city: c, lat: lat, lng: lng, plan: List<Place>.from(plan)));
+
+    // sort A-Z by city
+    items.sort((a, b) => a.city.toLowerCase().compareTo(b.city.toLowerCase()));
+
+    // keep max 5
+    while (items.length > 5) {
+      items.removeLast();
+    }
+
+    await _box.put(_keySavedPlans, items.map((x) => x.toMap()).toList());
   }
 
-  static Future<void> deleteSavedPlanById(String id) async {
-    final saved = loadSavedPlans();
-    saved.removeWhere((m) => (m['id'] ?? '').toString() == id);
-    await _box.put(_keySavedPlans, saved);
+  static Future<void> deleteSavedPlan(String city) async {
+    final c = city.trim();
+    if (c.isEmpty) return;
+
+    final items = loadSavedPlans();
+    items.removeWhere((x) => x.city.trim().toLowerCase() == c.toLowerCase());
+
+    await _box.put(_keySavedPlans, items.map((x) => x.toMap()).toList());
   }
-
-  static Future<void> clearSavedPlans() async {
-    await _box.delete(_keySavedPlans);
-  }
-
-  // ---------------------------------------------------------------------------
-  // BACKWARD COMPAT (původní API) – mapujeme na CURRENT PLAN
-  // ---------------------------------------------------------------------------
-
-  static Future<void> savePlan(List<Place> plan) => saveCurrentPlan(plan);
-  static List<Place>? loadPlan() => loadCurrentPlan();
-  static Future<void> clearPlan() => clearCurrentPlan();
 }

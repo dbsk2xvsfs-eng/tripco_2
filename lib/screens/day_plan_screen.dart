@@ -20,6 +20,9 @@ import '../services/place_mapper.dart';
 import '../widgets/place_card.dart';
 import '../widgets/replace_sheet.dart';
 
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
 
@@ -417,6 +420,122 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
   // ------------------- Save prompt for Refresh/Delete -------------------
 
+
+  Future<String> _resolveCityName() async {
+    if (_pos == null) return "Unknown";
+    if (_apiKey.isEmpty) return "Unknown";
+
+    final lat = _pos!.latitude;
+    final lng = _pos!.longitude;
+
+    final url = Uri.parse(
+      "https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$_apiKey",
+    );
+
+    final resp = await http.get(url);
+    if (resp.statusCode != 200) return "Unknown";
+
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    final results = (data["results"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+
+    for (final r in results) {
+      final comps = (r["address_components"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      for (final c in comps) {
+        final types = (c["types"] as List?)?.cast<String>() ?? const [];
+        if (types.contains("locality")) {
+          final name = (c["long_name"] ?? "").toString().trim();
+          if (name.isNotEmpty) return name;
+        }
+      }
+    }
+
+    // fallback: administrative_area_level_1 když "locality" není
+    for (final r in results) {
+      final comps = (r["address_components"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      for (final c in comps) {
+        final types = (c["types"] as List?)?.cast<String>() ?? const [];
+        if (types.contains("administrative_area_level_1")) {
+          final name = (c["long_name"] ?? "").toString().trim();
+          if (name.isNotEmpty) return name;
+        }
+      }
+    }
+
+    return "Unknown";
+  }
+
+  Future<void> _openSavedPlansSheet() async {
+    final saved = PlanStorage.loadSavedPlans();
+
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        final items = [...saved]..sort((a, b) => a.city.toLowerCase().compareTo(b.city.toLowerCase()));
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  "Uložené",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+
+                if (items.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text("Zatím nemáš uložený žádný plán."),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final it = items[i];
+                        return ListTile(
+                          title: Text(it.city),
+                          subtitle: Text("${it.plan.length} míst"),
+                          onTap: () async {
+                            // načti plán
+                            setState(() {
+                              _allPlan = List<Place>.from(it.plan);
+                              _sortAllByDistance();
+                              _selectedTab = "All";
+                            });
+                            await PlanStorage.savePlan(_allPlan);
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          },
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () async {
+                              await PlanStorage.deleteSavedPlan(it.city);
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              // znovu otevři se zaktualizovaným seznamem
+                              if (mounted) await _openSavedPlansSheet();
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<bool> _askSaveCurrentPlanToSaved() async {
     final res = await showDialog<_SaveChoice>(
       context: context,
@@ -446,15 +565,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     if (res == _SaveChoice.cancel || res == null) return false;
 
     if (res == _SaveChoice.yes) {
-      final p = _pos;
-      if (p != null) {
-        await PlanStorage.addSavedPlanSnapshot(
-          plan: _allPlan,
-          lat: p.latitude,
-          lng: p.longitude,
-          cityName: "", // město doplníme později v UI/logice
-        );
-      }
+
+      final city = await _resolveCityName();
+      await PlanStorage.upsertSavedPlan(
+        city: city,
+        lat: _pos!.latitude,
+        lng: _pos!.longitude,
+        plan: List<Place>.from(_allPlan),
+      );
     }
 
     return true; // pokračovat v akci
@@ -652,14 +770,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
             onPressed: _shareAll,
           ),
           IconButton(
+            icon: const Icon(Icons.bookmark_outline),
+            tooltip: "Uložené",
+            onPressed: _openSavedPlansSheet,
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: s.refresh,
             onPressed: _refreshEverything,
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: s.startFresh,
-            onPressed: _startFresh,
           ),
         ],
       ),
