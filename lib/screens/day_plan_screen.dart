@@ -120,7 +120,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
   // Kolik položek v katalogu a kolik do All
   static const int _poolSize = 15;
-  static const int _takeFromEachToAll = 3;
+  static const int _takeFromEachToAll = 2;
 
   // ------------------- lifecycle -------------------
 
@@ -308,12 +308,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       }
     }
 
-    // ✅ ať po initu ty vybrané zmizí z poolů
-    final ids = out.map((p) => p.id).toSet();
-    for (final k in _categoryPools.keys) {
-      _categoryPools[k] =
-          (_categoryPools[k] ?? const <Place>[]).where((p) => !ids.contains(p.id)).toList();
-    }
+
 
     // řazení ALL dle vzdálenosti
     if (_pos != null) {
@@ -657,20 +652,39 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
           SizedBox(
             height: 44,
-            child: ListView.separated(
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              scrollDirection: Axis.horizontal,
-              itemCount: tabs.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, i) {
-                final t = tabs[i];
-                final selected = t == _selectedTab;
-                return ChoiceChip(
-                  label: Text(t),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _selectedTab = t),
-                );
-              },
+              child: Row(
+                children: [
+                  // ✅ FIXED "All"
+                  ChoiceChip(
+                    label: const Text("All"),
+                    selected: _selectedTab == "All",
+                    onSelected: (_) => setState(() => _selectedTab = "All"),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // ✅ SCROLL only other tabs
+                  Expanded(
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: tabs.where((t) => t != "All").length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, i) {
+                        final otherTabs = tabs.where((t) => t != "All").toList();
+                        final t = otherTabs[i];
+                        final selected = t == _selectedTab;
+
+                        return ChoiceChip(
+                          label: Text(t),
+                          selected: selected,
+                          onSelected: (_) => setState(() => _selectedTab = t),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
