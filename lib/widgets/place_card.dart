@@ -13,6 +13,8 @@ import 'navigation_sheet.dart';
 class PlaceCard extends StatelessWidget {
   final Place place;
 
+  
+
   final double originLat;
   final double originLng;
   final RoutesService routes;

@@ -215,8 +215,33 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   static const int _poolSize = 15;
   static const int _takeFromEachToAll = 2;
 
+  // ---------- Category colors + emoji ----------
+  static const Map<String, Color> _catColor = {
+    "Culture": Color(0xFF9C6B3D),
+    "Museum": Color(0xFF4B6CB7),
+    "Nature": Color(0xFF2E7D32),
+    "Attraction": Color(0xFF7B1FA2),
+    "Castles": Color(0xFFB71C1C),
+    "Restaurant": Color(0xFF1565C0),
+    "Cafe": Color(0xFF6D4C41),
+  };
 
-  
+  static const Map<String, String> _catEmoji = {
+    "Culture": "🏛️",
+    "Museum": "🏛️",
+    "Nature": "🌳",
+    "Attraction": "🎡",
+    "Castles": "🏰",
+    "Restaurant": "🍽️",
+    "Cafe": "☕",
+  };
+
+  Color _colorForTab(String tab) => _catColor[tab] ?? const Color(0xFF607D8B);
+  String _emojiForTab(String tab) => _catEmoji[tab] ?? "✨";
+
+
+
+
 
 
   // ------------------- lifecycle -------------------
@@ -855,6 +880,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final tipsAccent = _hasUnsavedChanges ? _colorForTab("Attraction") : _colorForTab("Nature");
+    final tipsEmoji = _hasUnsavedChanges ? "🧾" : "💡";
 
     if (_loading) {
       return Scaffold(
@@ -916,17 +943,34 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
             onClear: _clearAllWithConfirm,
           ),
 
+
+
+
           SizedBox(
             height: 44,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
+
                   ChoiceChip(
-                    label: Text(_hasUnsavedChanges ? "Yours" : "Tips"),
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_hasUnsavedChanges ? "Yours" : "Tips"),
+                        const SizedBox(width: 6),
+                        Text(tipsEmoji),
+                      ],
+                    ),
                     selected: _selectedTab == "All",
+                    selectedColor: tipsAccent.withOpacity(0.18),
+                    backgroundColor: tipsAccent.withOpacity(0.10),
+                    labelStyle: TextStyle(color: tipsAccent),
                     onSelected: (_) => setState(() => _selectedTab = "All"),
                   ),
+
+
+
                   const SizedBox(width: 8),
 
                   Expanded(
@@ -939,9 +983,22 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                         final t = otherTabs[i];
                         final selected = t == _selectedTab;
 
+                        final accent = _colorForTab(t);
+                        final emoji = _emojiForTab(t);
+
                         return ChoiceChip(
-                          label: Text(t),
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(emoji),
+                              const SizedBox(width: 6),
+                              Text(t),
+                            ],
+                          ),
                           selected: selected,
+                          selectedColor: accent.withOpacity(0.18),
+                          backgroundColor: accent.withOpacity(0.10),
+                          labelStyle: TextStyle(color: accent),
                           onSelected: (_) => setState(() => _selectedTab = t),
                         );
                       },
