@@ -104,6 +104,24 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
   String _selectedTab = "All";
 
+  bool _hasUnsavedChanges = false;
+
+  Future<void> _saveCurrentPlanToSaved() async {
+    if (_pos == null) return;
+
+    final city = await _resolveCityName(); // už máš (nebo měj) funkci pro název města
+    await PlanStorage.upsertSavedPlan(
+      city: city,
+      lat: _pos!.latitude,
+      lng: _pos!.longitude,
+      plan: List<Place>.from(_allPlan),
+    );
+
+    if (!mounted) return;
+    setState(() => _hasUnsavedChanges = false);
+  }
+
+
   static const UserProfile _fixedProfile = UserProfile.solo;
   static const _apiKey = String.fromEnvironment('GOOGLE_API_KEY');
 
@@ -638,6 +656,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       _allPlan.removeAt(idx);
       _insertBackToPool(removed);
       _sortAllByDistance();
+
+      _hasUnsavedChanges = true;
+
     });
 
     await AnalyticsService.logRemove(id);
@@ -650,6 +671,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     final current = _allPlan[idx];
     setState(() {
       _allPlan[idx] = current.copyWith(done: !current.done);
+
+      _hasUnsavedChanges = true;
+
     });
     await PlanStorage.saveCurrentPlan(_allPlan);
   }
@@ -662,6 +686,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       final item = _allPlan.removeAt(oldIndex);
       _allPlan.insert(newIndex, item);
       _sortAllByDistance(); // držíme řazení dle km
+
+      _hasUnsavedChanges = true;
+
     });
     await PlanStorage.saveCurrentPlan(_allPlan);
   }
@@ -710,6 +737,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       _upsertIntoPool(selected);
 
       _sortAllByDistance();
+
+      _hasUnsavedChanges = true;
+
     });
 
     await AnalyticsService.logReplace(current.id);
@@ -725,6 +755,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     setState(() {
       _allPlan.add(p);
       _sortAllByDistance();
+
+      _hasUnsavedChanges = true;
+
     });
 
     await PlanStorage.saveCurrentPlan(_allPlan);
@@ -840,7 +873,11 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       ),
       body: Column(
         children: [
-          _SummaryBar(count: _allPlan.length),
+          _SummaryBar(
+            count: _allPlan.length,
+            showSave: _hasUnsavedChanges,
+            onSave: _saveCurrentPlanToSaved,
+          ),
 
           SizedBox(
             height: 44,
@@ -947,20 +984,43 @@ enum _SaveChoice { yes, no, cancel }
 
 class _SummaryBar extends StatelessWidget {
   final int count;
-  const _SummaryBar({required this.count});
+  final bool showSave;
+  final VoidCallback onSave;
+
+  const _SummaryBar({
+    required this.count,
+    required this.showSave,
+    required this.onSave,
+  });
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            "${s.todaySpots}: $count spots ✨",
-            style: const TextStyle(fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              Text(
+                "${s.todaySpots}: $count spots ✨",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              if (showSave) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: onSave,
+                  icon: const Icon(Icons.save),
+                  tooltip: "Uložit",
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ],
           ),
           const Text("Tripco"),
         ],
