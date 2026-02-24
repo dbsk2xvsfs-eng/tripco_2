@@ -54,6 +54,7 @@ class PlacesService {
     final body = {
       "includedTypes": includedTypes,
       "maxResultCount": safeMaxResults,
+      "rankPreference": "DISTANCE", // ✅ nejbližší první
       "locationRestriction": {
         "circle": {
           "center": {"latitude": lat, "longitude": lng},
