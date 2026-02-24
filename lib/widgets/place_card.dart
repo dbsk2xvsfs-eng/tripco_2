@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -21,11 +23,11 @@ class PlaceCard extends StatelessWidget {
   /// Category action
   final VoidCallback? onAddToAll;
 
-  /// Favorite (už se nezobrazuje – necháváme jen kvůli kompatibilitě)
+  /// Favorite (nezobrazuje se – necháváme pro kompatibilitu)
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
 
-  /// If true => Category mode (only "Add to All")
+  /// If true => Category mode (Add to All v řádku s Entry)
   /// If false => All mode (navigate/replace/remove/mark done)
   final bool categoryMode;
 
@@ -59,6 +61,23 @@ class PlaceCard extends StatelessWidget {
     }
   }
 
+  double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
+    const r = 6371000.0;
+    final dLat = _degToRad(lat2 - lat1);
+    final dLon = _degToRad(lon2 - lon1);
+    final a = (sin(dLat / 2) * sin(dLat / 2)) +
+        cos(_degToRad(lat1)) * cos(_degToRad(lat2)) * (sin(dLon / 2) * sin(dLon / 2));
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return r * c;
+  }
+
+  double _degToRad(double d) => d * (pi / 180.0);
+
+  String _kmText() {
+    final km = _haversineMeters(originLat, originLng, place.lat, place.lng) / 1000.0;
+    return "${km.toStringAsFixed(1)} km";
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
@@ -70,7 +89,6 @@ class PlaceCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
-        // ✅ zúžení karty
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,8 +122,8 @@ class PlaceCard extends StatelessWidget {
 
             const SizedBox(height: 8),
 
-            // ✅ Entry row + (ALL) Mark done v tom samém řádku
-            if (hasWebsite || !categoryMode) ...[
+            // Entry + WWW + km + (Category) Add / (All) Mark done
+            if (hasWebsite || !categoryMode || (categoryMode && onAddToAll != null)) ...[
               Row(
                 children: [
                   if (hasWebsite) ...[
@@ -120,8 +138,15 @@ class PlaceCard extends StatelessWidget {
                       tooltip: "Website",
                       visualDensity: VisualDensity.compact,
                     ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _kmText(),
+                      style: TextStyle(color: Colors.grey.shade800),
+                    ),
                   ],
                   const Spacer(),
+
+                  // ✅ ALL: Mark done v tom samém řádku
                   if (!categoryMode)
                     GestureDetector(
                       onTap: () => onToggleDone?.call(),
@@ -134,22 +159,25 @@ class PlaceCard extends StatelessWidget {
                         child: Text(place.done ? s.done : s.markDone),
                       ),
                     ),
+
+                  // ✅ CATEGORY: malé Add to All v tom samém řádku
+                  if (categoryMode && onAddToAll != null)
+                    TextButton(
+                      onPressed: onAddToAll,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text("Add to All"),
+                    ),
                 ],
               ),
               const SizedBox(height: 8),
             ],
 
-            // bottom actions: ALL vs CATEGORY
-            if (categoryMode) ...[
-              if (onAddToAll != null)
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: onAddToAll,
-                    child: const Text("Add to All"),
-                  ),
-                ),
-            ] else ...[
+            // bottom actions: ALL only
+            if (!categoryMode) ...[
               Row(
                 children: [
                   Expanded(
