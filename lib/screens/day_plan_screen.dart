@@ -122,6 +122,35 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   }
 
 
+  Future<void> _clearAllWithConfirm() async {
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Are you sure?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("No"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Yes"),
+          ),
+        ],
+      ),
+    );
+
+    if (res != true) return;
+
+    setState(() {
+      _allPlan.clear();
+      _hasUnsavedChanges = false;
+    });
+
+    await PlanStorage.savePlan(_allPlan);
+  }
+
+
   static const UserProfile _fixedProfile = UserProfile.solo;
   static const _apiKey = String.fromEnvironment('GOOGLE_API_KEY');
 
@@ -878,7 +907,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
           _SummaryBar(
             count: _allPlan.length,
             showSave: _hasUnsavedChanges,
+            showClear: _selectedTab == "All",
             onSave: _saveCurrentPlanToSaved,
+            onClear: _clearAllWithConfirm,
           ),
 
           SizedBox(
@@ -987,12 +1018,16 @@ enum _SaveChoice { yes, no, cancel }
 class _SummaryBar extends StatelessWidget {
   final int count;
   final bool showSave;
+  final bool showClear;
   final VoidCallback onSave;
+  final VoidCallback onClear;
 
   const _SummaryBar({
     required this.count,
     required this.showSave,
+    required this.showClear,
     required this.onSave,
+    required this.onClear,
   });
 
   @override
@@ -1011,12 +1046,27 @@ class _SummaryBar extends StatelessWidget {
                 "${s.todaySpots}: $count spots ✨",
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
+
+              // 💾 SAVE (jen když je změna)
               if (showSave) ...[
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: onSave,
                   icon: const Icon(Icons.save),
-                  tooltip: "Uložit",
+                  tooltip: "Save",
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+
+              // 🗑 CLEAR ALL (jen v All tabu)
+              if (showClear) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  onPressed: onClear,
+                  icon: const Icon(Icons.delete_sweep),
+                  tooltip: "Clear all",
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
