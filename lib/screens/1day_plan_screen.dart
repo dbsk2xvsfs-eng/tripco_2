@@ -25,7 +25,6 @@ import 'package:http/http.dart' as http;
 
 import 'package:geocoding/geocoding.dart';
 
-
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
 
@@ -60,13 +59,13 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       final pm = placemarks.isNotEmpty ? placemarks.first : null;
 
       final city = (pm?.locality ?? pm?.subAdministrativeArea ?? pm?.administrativeArea ?? "").trim();
-      if (!mounted) return;
-
       setState(() {
-        _cityLabel = city.isEmpty ? "GPS" : city;
+        _cityLabel = city.isNotEmpty ? city : "GPS";
       });
     } catch (_) {
-      // když selže geocoding, necháme "GPS"
+      setState(() {
+        _cityLabel = "GPS";
+      });
     }
   }
 
@@ -135,7 +134,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       radiusMeters: 15000,
     ),
     "Cafe": _CategoryConfig(
-      includedTypes: {"cafe", "coffee_shop", "tea_house", "bakery"},
+      includedTypes: {"cafe"},
       radiusMeters: 15000,
     ),
     "Castles": _CategoryConfig(
@@ -201,6 +200,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
       await _updateCityLabel();
 
+
       // ✅ load CURRENT (autosave) plan
       final savedAll = PlanStorage.loadCurrentPlan();
       if (savedAll != null && savedAll.isNotEmpty) {
@@ -244,7 +244,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
     if (pt == "castle") return "Castles";
 
-    if (pt == "cafe" || pt == "coffee_shop" || pt == "tea_house" || pt == "bakery") return "Cafe";
+    if (pt == "cafe") return "Cafe";
     if (pt == "restaurant") return "Restaurant";
 
     if (pt == "park" || pt == "hiking_area") return "Nature";
