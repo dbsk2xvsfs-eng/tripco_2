@@ -27,7 +27,7 @@ class DayPlanScreen extends StatefulWidget {
   State<DayPlanScreen> createState() => _DayPlanScreenState();
 }
 
-class _DayPlanScreenState extends State<DayPlanScreen> {
+class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserver {
   Position? _pos;
   bool _loading = true;
   String? _error;
@@ -54,7 +54,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     });
   }
 
-
   String _selectedTab = "All";
 
   static const UserProfile _fixedProfile = UserProfile.solo;
@@ -62,7 +61,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
   // ------------------- Category config -------------------
 
-  // “Hlavní” kategorie, ze kterých se skládá All: 3 z každé
+  // “Hlavní” kategorie, ze kterých se skládá All
   static const List<String> _mainCategoriesForAll = [
     "Culture",
     "Castles",
@@ -70,11 +69,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     "Attraction",
     "Restaurant",
     "Cafe",
-
+    "Museum",
   ];
 
   // Každá kategorie = přesné Google primaryType (includedTypes)
-  // radius podle požadavku (ale request se clampne na max 50 000m)
   static const Map<String, _CategoryConfig> _categoryConfig = {
     "Museum": _CategoryConfig(
       includedTypes: {"museum"},
@@ -128,6 +126,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.addObserver(this);
     AnalyticsService.initIfAvailable();
 
     if (_apiKey.isEmpty) {
@@ -143,6 +142,22 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     _init();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // ✅ autosave při odchodu do backgroundu / zavření
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      PlanStorage.saveCurrentPlan(_allPlan);
+    }
+  }
+
   Future<void> _init() async {
     try {
       final p = await LocationService.getCurrentLocation();
@@ -156,8 +171,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
       _pos = p;
 
-      // ✅ load saved All plan only
-      final savedAll = PlanStorage.loadPlan();
+      // ✅ load CURRENT (autosave) plan
+      final savedAll = PlanStorage.loadCurrentPlan();
       if (savedAll != null && savedAll.isNotEmpty) {
         _allPlan = savedAll;
       }
@@ -165,11 +180,13 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       // ✅ always (re)load category pools (katalogy)
       await _loadCategoryPools();
 
-      // ✅ if no saved All, build initial All = 3 z každé hlavní kategorie
+      // ✅ if no saved plan, build initial All from pools and save as current
       if (_allPlan.isEmpty) {
         _allPlan = _buildInitialAllFromPools();
-        await PlanStorage.savePlan(_allPlan);
+        await PlanStorage.saveCurrentPlan(_allPlan);
       } else {
+        // vždy udržuj správné řazení po startu
+        _sortAllByDistance();
       }
 
       setState(() {
@@ -185,7 +202,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     }
   }
 
-
   String _targetCategoryForPrimaryType(String? primaryType) {
     final pt = (primaryType ?? "").trim();
     if (pt.isEmpty) return "__IGNORE__";
@@ -196,22 +212,17 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     // ✅ UNIQUE mapping (žádné překryvy)
     if (pt == "museum") return "Museum";
 
-    // Castles
     if (pt == "castle") return "Castles";
 
-    // Food
     if (pt == "cafe") return "Cafe";
     if (pt == "restaurant") return "Restaurant";
 
-    // Nature
     if (pt == "park" || pt == "hiking_area") return "Nature";
 
-    // Attraction (zábava / “attraction” typy)
     if (pt == "aquarium" || pt == "zoo" || pt == "amusement_park" || pt == "tourist_attraction") {
       return "Attraction";
     }
 
-    // ✅ Culture / Landmarks (památky jako Charles Bridge apod.)
     if (pt == "historical_landmark" ||
         pt == "art_gallery" ||
         pt == "church" ||
@@ -224,11 +235,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       return "Culture";
     }
 
-    // fallback – ať se ti to nemíchá do Attraction
     return "Culture";
   }
-
-
 
   // ------------------- Pools (katalog) -------------------
 
@@ -242,14 +250,13 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       final key = entry.key;
       final cfg = entry.value;
 
-      // ✅ Places API radius max 50 000
       final radius = min(cfg.radiusMeters, 50000);
 
       final raw = await _places.nearby(
         lat: originLat,
         lng: originLng,
         radiusMeters: radius,
-        maxResults: 20, // 1..20
+        maxResults: 20,
         includedTypes: cfg.includedTypes.toList(),
       );
 
@@ -260,7 +267,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
         return PlaceMapper.fromGooglePlace(p, distanceMinutes: minutesSeed);
       })
           .where((x) => x.id.isNotEmpty)
-      // ✅ KLÍČ: nech jen věci, které patří do této kategorie dle JEDINÉ mapy
           .where((x) {
         final target = _targetCategoryForPrimaryType(x.primaryType);
         if (target == "__IGNORE__") return false;
@@ -268,14 +274,12 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       })
           .toList();
 
-      // ✅ řazení dle vzdálenosti (přímá vzdálenost)
       mapped.sort((a, b) {
         final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
         final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
         return da.compareTo(db);
       });
 
-      // ✅ unikáty dle id + take 15
       final uniq = <String>{};
       final out = <Place>[];
       for (final pl in mapped) {
@@ -285,11 +289,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
       _categoryPools[key] = out;
     }
-  }
-
-  void _removeAllFromPools() {
-    // NIC neodstraňujeme.
-    // Kategorie mají zobrazovat i položky z ALL.
   }
 
   List<Place> _buildInitialAllFromPools() {
@@ -308,13 +307,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       }
     }
 
-
-
-    // řazení ALL dle vzdálenosti
     if (_pos != null) {
       final originLat = _pos!.latitude;
       final originLng = _pos!.longitude;
-
       out.sort((a, b) {
         final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
         final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
@@ -360,14 +355,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     final pt = (p.primaryType ?? "").trim();
     if (pt.isEmpty) return "Attraction";
 
-    // priorita: nejdřív Cafe/Restaurant (ať se nechytnou omylem do Attraction)
     if (_categoryConfig["Cafe"]!.includedTypes.contains(pt)) return "Cafe";
     if (_categoryConfig["Restaurant"]!.includedTypes.contains(pt)) return "Restaurant";
-
-    // Castles
     if (_categoryConfig["Castles"]!.includedTypes.contains(pt)) return "Castles";
 
-    // ostatní hlavní
     for (final entry in _categoryConfig.entries) {
       final cat = entry.key;
       final cfg = entry.value;
@@ -388,19 +379,16 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
     final list = List<Place>.from(_categoryPools[cat] ?? const <Place>[]);
 
-    // pokud už tam je, jen necháme (nechceme duplikáty)
     if (!list.any((x) => x.id == p.id)) {
       list.add(p);
     }
 
-    // vždy řadit dle km
     list.sort((a, b) {
       final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
       final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
       return da.compareTo(db);
     });
 
-    // držíme limit 15 (ale tím pádem může někdy "vypadnout" nejvzdálenější)
     _categoryPools[cat] = list.take(_poolSize).toList();
   }
 
@@ -413,31 +401,63 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
     final list = List<Place>.from(_categoryPools[cat] ?? const <Place>[]);
 
-    // pokud už je v All, nevracej
     if (_allPlan.any((x) => x.id == p.id)) return;
-
-    // pokud už v poolu je, nedělej nic
     if (list.any((x) => x.id == p.id)) return;
 
     list.add(p);
 
-    // seřadit dle km
     list.sort((a, b) {
       final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
       final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
       return da.compareTo(db);
     });
 
-    // oříznout na max 15
-    final trimmed = list.take(_poolSize).toList();
-    _categoryPools[cat] = trimmed;
+    _categoryPools[cat] = list.take(_poolSize).toList();
   }
 
-  void _removeFromAllPoolsById(String id) {
-    for (final k in _categoryPools.keys) {
-      _categoryPools[k] =
-          (_categoryPools[k] ?? const <Place>[]).where((x) => x.id != id).toList();
+  // ------------------- Save prompt for Refresh/Delete -------------------
+
+  Future<bool> _askSaveCurrentPlanToSaved() async {
+    final res = await showDialog<_SaveChoice>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text("Chceš uložit svůj plán?"),
+          content: const Text("Pokud dáš Uložit, tvůj aktuální plán se uloží do „Uloženo“."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(_SaveChoice.cancel),
+              child: const Text("Zrušit"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(_SaveChoice.no),
+              child: const Text("Ne"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(_SaveChoice.yes),
+              child: const Text("Uložit"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (res == _SaveChoice.cancel || res == null) return false;
+
+    if (res == _SaveChoice.yes) {
+      final p = _pos;
+      if (p != null) {
+        await PlanStorage.addSavedPlanSnapshot(
+          plan: _allPlan,
+          lat: p.latitude,
+          lng: p.longitude,
+          cityName: "", // město doplníme později v UI/logice
+        );
+      }
     }
+
+    return true; // pokračovat v akci
   }
 
   // ------------------- Actions: All -------------------
@@ -457,7 +477,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     });
 
     await AnalyticsService.logRemove(id);
-    await PlanStorage.savePlan(_allPlan);
+    await PlanStorage.saveCurrentPlan(_allPlan);
   }
 
   Future<void> _toggleDoneInAllById(String id) async {
@@ -467,7 +487,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     setState(() {
       _allPlan[idx] = current.copyWith(done: !current.done);
     });
-    await PlanStorage.savePlan(_allPlan);
+    await PlanStorage.saveCurrentPlan(_allPlan);
   }
 
   void _reorderAll(int oldIndex, int newIndex) async {
@@ -477,9 +497,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       if (newIndex > oldIndex) newIndex -= 1;
       final item = _allPlan.removeAt(oldIndex);
       _allPlan.insert(newIndex, item);
-      _sortAllByDistance();
+      _sortAllByDistance(); // držíme řazení dle km
     });
-    await PlanStorage.savePlan(_allPlan);
+    await PlanStorage.saveCurrentPlan(_allPlan);
   }
 
   Future<void> _openReplaceForAllItem(Place current) async {
@@ -487,15 +507,11 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
 
     final cat = _categoryForPlace(current);
 
-    // kandidáti z poolu stejné kategorie
     final candidates = List<Place>.from(_categoryPools[cat] ?? const <Place>[])
-    // neaktuální položka
         .where((p) => p.id != current.id)
-    // nesmí být už v ALL (jinak by se duplicitně objevila v All)
         .where((p) => !_allPlan.any((x) => x.id == p.id))
         .toList();
 
-    // řazení podle vzdálenosti od GPS
     final originLat = _pos!.latitude;
     final originLng = _pos!.longitude;
     candidates.sort((a, b) {
@@ -526,19 +542,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       final idx = _allPlan.indexWhere((p) => p.id == current.id);
       if (idx != -1) _allPlan[idx] = selected;
 
-      // ✅ pools se nemažou, ale pro jistotu:
-      // (a) původní current se má "vrátit" do správné kategorie
       _upsertIntoPool(current);
-
-      // (b) vybraný selected se má v kategorii zobrazit bez Add (protože už je v ALL)
-      // -> stačí, že je v poolu; Add button se vypne přes alreadyInAll logiku v build()
       _upsertIntoPool(selected);
+
       _sortAllByDistance();
     });
 
     await AnalyticsService.logReplace(current.id);
-    await PlanStorage.savePlan(_allPlan);
-
+    await PlanStorage.saveCurrentPlan(_allPlan);
   }
 
   // ------------------- Actions: Category pools -------------------
@@ -552,7 +563,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       _sortAllByDistance();
     });
 
-    await PlanStorage.savePlan(_allPlan);
+    await PlanStorage.saveCurrentPlan(_allPlan);
   }
 
   Future<void> _toggleFavorite(Place place) async {
@@ -573,6 +584,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   Future<void> _refreshEverything() async {
     if (_pos == null) return;
 
+    final proceed = await _askSaveCurrentPlanToSaved();
+    if (!proceed) return;
+
     setState(() {
       _loading = true;
       _error = null;
@@ -583,7 +597,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
       await _loadCategoryPools();
 
       _allPlan = _buildInitialAllFromPools();
-      await PlanStorage.savePlan(_allPlan);
+      await PlanStorage.saveCurrentPlan(_allPlan);
 
       setState(() {
         _loading = false;
@@ -597,7 +611,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
   }
 
   Future<void> _startFresh() async {
-    await PlanStorage.clearPlan();
+    final proceed = await _askSaveCurrentPlanToSaved();
+    if (!proceed) return;
+
+    await PlanStorage.clearCurrentPlan();
     await _refreshEverything();
   }
 
@@ -656,7 +673,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  // ✅ FIXED "All"
                   ChoiceChip(
                     label: const Text("All"),
                     selected: _selectedTab == "All",
@@ -664,7 +680,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                   ),
                   const SizedBox(width: 8),
 
-                  // ✅ SCROLL only other tabs
                   Expanded(
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
@@ -707,7 +722,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                   originLng: _pos!.longitude,
                   routes: _routes,
 
-                  // ✅ ALL mode => Navigate / Replace / Remove / Mark done
                   categoryMode: false,
                   onRemove: () => _removeFromAllById(place.id),
                   onReplace: () => _openReplaceForAllItem(place),
@@ -716,7 +730,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
                   isFavorite: isFav,
                   onToggleFavorite: () => _toggleFavorite(place),
 
-                  // v ALL žádné Add
                   onAddToAll: null,
                 );
               },
@@ -752,6 +765,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> {
     );
   }
 }
+
+enum _SaveChoice { yes, no, cancel }
 
 // ------------------- Summary bar -------------------
 
