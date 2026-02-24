@@ -52,22 +52,42 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   String _cityLabel = "GPS…";
 
   Future<void> _updateCityLabel() async {
-    final p = _pos;
-    if (p == null) return;
+    if (_pos == null) return;
 
-    try {
-      final placemarks = await placemarkFromCoordinates(p.latitude, p.longitude);
-      final pm = placemarks.isNotEmpty ? placemarks.first : null;
+    final lat = _pos!.latitude;
+    final lng = _pos!.longitude;
 
-      final city = (pm?.locality ?? pm?.subAdministrativeArea ?? pm?.administrativeArea ?? "").trim();
-      if (!mounted) return;
+    final uri = Uri.parse(
+      "https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$_apiKey&language=cs",
+    );
 
-      setState(() {
-        _cityLabel = city.isEmpty ? "GPS" : city;
-      });
-    } catch (_) {
-      // když selže geocoding, necháme "GPS"
+    final res = await http.get(uri);
+    if (res.statusCode != 200) return;
+
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final results = (data["results"] as List?) ?? [];
+
+    String? city;
+
+    for (final r in results) {
+      final comps = (r["address_components"] as List?) ?? [];
+      for (final c in comps) {
+        final types = (c["types"] as List?)?.cast<String>() ?? const <String>[];
+        if (types.contains("locality")) {
+          city = c["long_name"] as String?;
+          break;
+        }
+        if (city == null && types.contains("administrative_area_level_2")) {
+          city = c["long_name"] as String?;
+        }
+      }
+      if (city != null) break;
     }
+
+    if (!mounted) return;
+    setState(() {
+      _cityLabel = (city ?? "GPS");
+    });
   }
 
   void _sortAllByDistance() {
@@ -198,7 +218,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       }
 
       _pos = p;
-
       await _updateCityLabel();
 
       // ✅ load CURRENT (autosave) plan
