@@ -23,6 +23,8 @@ import '../widgets/replace_sheet.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import 'package:geocoding/geocoding.dart';
+
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
 
@@ -44,6 +46,28 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
   // ✅ Kategorie = katalog (15 položek), jen Add to All
   final Map<String, List<Place>> _categoryPools = {};
+
+
+  String _cityLabel = "GPS…";
+
+  Future<void> _updateCityLabel() async {
+    final p = _pos;
+    if (p == null) return;
+
+    try {
+      final placemarks = await placemarkFromCoordinates(p.latitude, p.longitude);
+      final pm = placemarks.isNotEmpty ? placemarks.first : null;
+
+      final city = (pm?.locality ?? pm?.subAdministrativeArea ?? pm?.administrativeArea ?? "").trim();
+      setState(() {
+        _cityLabel = city.isNotEmpty ? city : "GPS";
+      });
+    } catch (_) {
+      setState(() {
+        _cityLabel = "GPS";
+      });
+    }
+  }
 
   void _sortAllByDistance() {
     if (_pos == null) return;
@@ -173,6 +197,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       }
 
       _pos = p;
+
+      await _updateCityLabel();
+
 
       // ✅ load CURRENT (autosave) plan
       final savedAll = PlanStorage.loadCurrentPlan();
@@ -764,6 +791,17 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
         title: Text(s.dayPlan),
         centerTitle: true,
         actions: [
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Center(
+              child: Text(
+                _cityLabel,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+
           IconButton(
             icon: const Icon(Icons.ios_share),
             tooltip: s.share,
