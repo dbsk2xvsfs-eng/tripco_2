@@ -28,6 +28,59 @@ class ReplaceSheet extends StatelessWidget {
     required this.candidates,
   });
 
+  String _extractCategory(String title) {
+    // očekává např. "Replace (Culture)"
+    final start = title.indexOf('(');
+    final end = title.indexOf(')');
+    if (start != -1 && end != -1 && end > start + 1) {
+      return title.substring(start + 1, end).trim();
+    }
+    // fallback: vezmi poslední slovo nebo celý text
+    return title.trim();
+  }
+
+  Color _colorForCategory(String cat) {
+    switch (cat) {
+      case "Culture":
+        return const Color(0xFFB86B2B); // jemná hnědá
+      case "Museum":
+        return const Color(0xFF2F6FD6); // modrá
+      case "Nature":
+        return const Color(0xFF2E7D32); // zelená
+      case "Attraction":
+        return const Color(0xFF7B3FE4); // fialová
+      case "Castles":
+        return const Color(0xFFB71C1C); // tm. červená
+      case "Restaurant":
+        return const Color(0xFF1E88E5); // modrá
+      case "Cafe":
+        return const Color(0xFF6D4C41); // kávová
+      default:
+        return const Color(0xFF607D8B); // šedo-modrá
+    }
+  }
+
+  String _emojiForCategory(String cat) {
+    switch (cat) {
+      case "Culture":
+        return "⛪️";
+      case "Museum":
+        return "🏛️";
+      case "Nature":
+        return "🌳";
+      case "Attraction":
+        return "🎡";
+      case "Castles":
+        return "🏰";
+      case "Restaurant":
+        return "🍽️";
+      case "Cafe":
+        return "☕";
+      default:
+        return "✨";
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sorted = [...candidates];
@@ -37,39 +90,78 @@ class ReplaceSheet extends StatelessWidget {
       return da.compareTo(db);
     });
 
+    final cat = _extractCategory(title);
+    final accent = _colorForCategory(cat);
+
     return SafeArea(
+      // ✅ posun dolů (~2 cm)
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: sorted.length,
-                itemBuilder: (context, i) {
-                  final p = sorted[i];
-                  final distKm = _haversineMeters(originLat, originLng, p.lat, p.lng) / 1000.0;
-
-                  final disabled = p.id == currentId || allIds.contains(p.id);
-
-                  return Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    child: ListTile(
-                      title: Text(p.name),
-                      subtitle: Text("${distKm.toStringAsFixed(1)} km"),
-                      trailing: const Icon(Icons.swap_horiz),
-                      enabled: !disabled,
-                      onTap: disabled ? null : () => Navigator.of(context).pop(p),
+        padding: const EdgeInsets.only(top: 20),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ✅ barevné záhlaví dle kategorie
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: accent.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      _emojiForCategory(cat),
+                      style: const TextStyle(fontSize: 18),
                     ),
-                  );
-                },
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 12),
+
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: sorted.length,
+                  itemBuilder: (context, i) {
+                    final p = sorted[i];
+                    final distKm =
+                        _haversineMeters(originLat, originLng, p.lat, p.lng) / 1000.0;
+
+                    final disabled = p.id == currentId || allIds.contains(p.id);
+
+                    return Card(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      child: ListTile(
+                        title: Text(p.name),
+                        subtitle: Text("${distKm.toStringAsFixed(1)} km"),
+                        trailing: const Icon(Icons.swap_horiz),
+                        enabled: !disabled,
+                        onTap: disabled ? null : () => Navigator.of(context).pop(p),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
