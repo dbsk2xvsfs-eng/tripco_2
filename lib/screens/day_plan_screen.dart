@@ -910,36 +910,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
         title: Text(s.dayPlan),
         centerTitle: true,
         actions: [
-          // ✅ GPS / Brno clickable
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Center(
-              child: ValueListenableBuilder<String>(
-                valueListenable: LocationService.locationLabel,
-                builder: (_, label, __) {
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: _openCityPicker,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            label,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.keyboard_arrow_down, size: 18),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-
           IconButton(
             icon: const Icon(Icons.ios_share),
             tooltip: s.share,
@@ -965,6 +935,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
             showClear: _selectedTab == "All",
             onSave: _saveCurrentPlanToSaved,
             onClear: _clearAllWithConfirm,
+            onPickLocation: _openCityPicker, // ✅ tohle otevře dialog s městem
           ),
           SizedBox(
             height: 44,
@@ -1095,12 +1066,16 @@ class _SummaryBar extends StatelessWidget {
   final VoidCallback onSave;
   final VoidCallback onClear;
 
+  // ✅ nové: klik na lokaci (otevře city picker)
+  final VoidCallback onPickLocation;
+
   const _SummaryBar({
     required this.count,
     required this.showSave,
     required this.showClear,
     required this.onSave,
     required this.onClear,
+    required this.onPickLocation,
   });
 
   @override
@@ -1119,6 +1094,7 @@ class _SummaryBar extends StatelessWidget {
                 "${s.todaySpots}: $count spots ✨",
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
+
               if (showSave) ...[
                 const SizedBox(width: 8),
                 IconButton(
@@ -1130,6 +1106,7 @@ class _SummaryBar extends StatelessWidget {
                   constraints: const BoxConstraints(),
                 ),
               ],
+
               if (showClear) ...[
                 const SizedBox(width: 4),
                 IconButton(
@@ -1143,7 +1120,31 @@ class _SummaryBar extends StatelessWidget {
               ],
             ],
           ),
-          const Text("Tripco"),
+
+          // ✅ místo "Tripco" zobrazíme GPS / Brno (a je to klikatelné)
+          ValueListenableBuilder<String>(
+            valueListenable: LocationService.locationLabel,
+            builder: (_, label, __) {
+              return InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: onPickLocation,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.keyboard_arrow_down, size: 18),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -1185,14 +1186,115 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
   List<_PickedCity> _items = [];
   _PickedCity? _selected;
 
+  int _callId = 0;
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
+  String _stripDiacritics(String input) {
+    const map = {
+      'á': 'a', 'č': 'c', 'ď': 'd', 'é': 'e', 'ě': 'e', 'í': 'i', 'ň': 'n', 'ó': 'o',
+      'ř': 'r', 'š': 's', 'ť': 't', 'ú': 'u', 'ů': 'u', 'ý': 'y', 'ž': 'z',
+      'Á': 'A', 'Č': 'C', 'Ď': 'D', 'É': 'E', 'Ě': 'E', 'Í': 'I', 'Ň': 'N', 'Ó': 'O',
+      'Ř': 'R', 'Š': 'S', 'Ť': 'T', 'Ú': 'U', 'Ů': 'U', 'Ý': 'Y', 'Ž': 'Z',
+    };
+
+    final sb = StringBuffer();
+    for (final ch in input.split('')) {
+      sb.write(map[ch] ?? ch);
+    }
+    return sb.toString();
+  }
+
+  Future<List<_PickedCity>> _fetchSuggestions(String query) async {
+    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+      'q': query,
+      'format': 'json',
+      'addressdetails': '1',
+      'limit': '10',
+      'accept-language': 'cs',
+    });
+
+    final resp = await http.get(
+      uri,
+      headers: const {
+        'User-Agent': 'TripcoApp/1.0',
+      },
+    );
+
+    if (resp.statusCode != 200) {
+      throw Exception('Nominatim error ${resp.statusCode}');
+    }
+
+    final data = (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+    final out = <_PickedCity>[];
+
+    for (final e in data) {
+      final lat = double.tryParse((e['lat'] ?? '').toString());
+      final lon = double.tryParse((e['lon'] ?? '').toString());
+      if (lat == null || lon == null) continue;
+
+      // addressdetails=1 => Nominatim vrací "address" objekt
+      final address = (e['address'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+
+      // Město/obec se může jmenovat různě podle typu sídla
+      final city = (address['city'] ??
+          address['town'] ??
+          address['village'] ??
+          address['municipality'] ??
+          address['hamlet'])
+          ?.toString()
+          .trim();
+
+      // kraj / okres / stát (na CZ typicky state = kraj)
+      final state = address['state']?.toString().trim(); // Liberecký kraj
+      final county = address['county']?.toString().trim(); // okres
+      final country = address['country']?.toString().trim(); // Czechia
+
+      if (city == null || city.isEmpty) {
+        // fallback, když Nominatim nevrátí city/town/village
+        final display = (e['display_name'] ?? '').toString().trim();
+        if (display.isEmpty) continue;
+        final first = display.split(',').first.trim();
+        if (first.isEmpty) continue;
+        out.add(_PickedCity(label: first, lat: lat, lng: lon));
+        continue;
+      }
+
+      // Label: jen město, případně "město, kraj"
+      // (kraj preferujeme před okresem; když není, vezmeme okres; když není, stát)
+      final extra = (state != null && state.isNotEmpty)
+          ? state
+          : (county != null && county.isNotEmpty)
+          ? county
+          : (country != null && country.isNotEmpty)
+          ? country
+          : null;
+
+      final label = (extra == null || extra.isEmpty) ? city : "$city, $extra";
+
+      out.add(_PickedCity(label: label, lat: lat, lng: lon));
+    }
+
+    // Volitelné: odfiltruj duplicity (občas Nominatim vrací víc řádků pro totéž)
+    final seen = <String>{};
+    final unique = <_PickedCity>[];
+    for (final it in out) {
+      if (seen.add("${it.label}|${it.lat.toStringAsFixed(5)}|${it.lng.toStringAsFixed(5)}")) {
+        unique.add(it);
+      }
+    }
+
+    return unique;
+  }
+
   Future<void> _search(String q) async {
     final query = q.trim();
+    final myCall = ++_callId;
+
     if (query.length < 2) {
       setState(() {
         _items = [];
@@ -1201,54 +1303,33 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
       return;
     }
 
+    // ✅ debounce 250ms
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+    if (myCall != _callId) return;
+
     setState(() => _loading = true);
     try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': query,
-        'format': 'json',
-        'addressdetails': '1',
-        'limit': '10',
-        // pomůže cílit na města/obce (není 100% garantované, ale zlepší výsledky)
-        'accept-language': 'cs',
-      });
+      // 1) normální dotaz
+      var out = await _fetchSuggestions(query);
 
-      final resp = await http.get(
-        uri,
-        headers: const {
-          // Nominatim doporučuje identifikovat klienta
-          'User-Agent': 'TripcoApp/1.0',
-        },
-      );
-
-      if (resp.statusCode != 200) {
-        throw Exception('Nominatim error ${resp.statusCode}');
-      }
-
-      final data = (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
-      final out = <_PickedCity>[];
-
-      for (final e in data) {
-        final lat = double.tryParse((e['lat'] ?? '').toString());
-        final lon = double.tryParse((e['lon'] ?? '').toString());
-        if (lat == null || lon == null) continue;
-
-        final display = (e['display_name'] ?? '').toString();
-        if (display.trim().isEmpty) continue;
-
-        // krátký label: první 2 části
-        final parts = display.split(',').map((s) => s.trim()).toList();
-        final label = parts.length >= 2 ? "${parts[0]}, ${parts[1]}" : parts[0];
-
-        out.add(_PickedCity(label: label, lat: lat, lng: lon));
+      // 2) fallback bez diakritiky (když nic nenajde)
+      final noDia = _stripDiacritics(query);
+      if (out.isEmpty && noDia != query) {
+        out = await _fetchSuggestions(noDia);
       }
 
       if (!mounted) return;
+      if (myCall != _callId) return;
+
       setState(() {
         _items = out;
         _selected = null;
       });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && myCall == _callId) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -1301,7 +1382,6 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
               if (_loading) const LinearProgressIndicator(),
               const SizedBox(height: 8),
 
-              // Použít GPS
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
