@@ -35,7 +35,7 @@ class ReplaceSheet extends StatelessWidget {
     if (start != -1 && end != -1 && end > start + 1) {
       return title.substring(start + 1, end).trim();
     }
-    // fallback: vezmi poslední slovo nebo celý text
+    // fallback: vezmi celý text
     return title.trim();
   }
 
@@ -133,9 +133,7 @@ class ReplaceSheet extends StatelessWidget {
                   ],
                 ),
               ),
-
               const SizedBox(height: 12),
-
               Flexible(
                 child: ListView.builder(
                   shrinkWrap: true,
@@ -148,7 +146,9 @@ class ReplaceSheet extends StatelessWidget {
                     final disabled = p.id == currentId || allIds.contains(p.id);
 
                     return Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                       child: ListTile(
                         title: Text(p.name),
                         subtitle: Text("${distKm.toStringAsFixed(1)} km"),
@@ -173,7 +173,9 @@ double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
   final dLat = _degToRad(lat2 - lat1);
   final dLon = _degToRad(lon2 - lon1);
   final a = (sin(dLat / 2) * sin(dLat / 2)) +
-      cos(_degToRad(lat1)) * cos(_degToRad(lat2)) * (sin(dLon / 2) * sin(dLon / 2));
+      cos(_degToRad(lat1)) *
+          cos(_degToRad(lat2)) *
+          (sin(dLon / 2) * sin(dLon / 2));
   final c = 2 * atan2(sqrt(a), sqrt(1 - a));
   return r * c;
 }

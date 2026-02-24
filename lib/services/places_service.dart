@@ -1,10 +1,15 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
+
+import 'location_service.dart';
 
 class PlacesService {
   final String apiKey;
   PlacesService({required this.apiKey});
 
+  /// PŮVODNÍ METODA – ZACHOVÁNO BEZE ZMĚNY (API i chování)
+  /// Voláš ji když už máš lat/lng.
   Future<List<Map<String, dynamic>>> nearby({
     required double lat,
     required double lng,
@@ -71,5 +76,43 @@ class PlacesService {
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final places = (data["places"] as List?)?.cast<Map<String, dynamic>>() ?? [];
     return places;
+  }
+
+  /// NOVÉ (NEINVASIVNÍ): použije "efektivní" polohu z LocationService:
+  /// - pokud je vybrané město (MANUAL), použije jeho souřadnice
+  /// - jinak použije GPS polohu zařízení
+  ///
+  /// Vrací stejné výsledky jako nearby(), jen nemusíš posílat lat/lng.
+  Future<List<Map<String, dynamic>>> nearbyFromEffectiveLocation({
+    int radiusMeters = 6000,
+    int maxResults = 12,
+    List<String> includedTypes = const [
+      "tourist_attraction",
+      "museum",
+      "park",
+      "art_gallery",
+      "hiking_area",
+      "zoo",
+      "aquarium",
+      "amusement_park",
+      "historical_landmark",
+      "restaurant",
+      "cafe",
+    ],
+  }) async {
+    final Position? pos = await LocationService.getEffectiveLocation();
+    if (pos == null) {
+      // stejné chování jako bys neměl GPS – nechávám to jako exception,
+      // ať se to v UI dá zachytit (snackbar, fallback apod.)
+      throw Exception("Effective location is null (GPS unavailable and no manual city selected).");
+    }
+
+    return nearby(
+      lat: pos.latitude,
+      lng: pos.longitude,
+      radiusMeters: radiusMeters,
+      maxResults: maxResults,
+      includedTypes: includedTypes,
+    );
   }
 }
