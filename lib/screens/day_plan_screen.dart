@@ -788,12 +788,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       _loading = true;
       _error = null;
       _selectedTab = "All";
+      _hasUnsavedChanges = false;
     });
 
     try {
       await _loadCategoryPools();
 
       _allPlan = _buildInitialAllFromPools();
+      _hasUnsavedChanges = false;
       await PlanStorage.saveCurrentPlan(_allPlan);
 
       setState(() {
