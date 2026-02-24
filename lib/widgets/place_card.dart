@@ -21,6 +21,7 @@ class PlaceCard extends StatelessWidget {
   /// Category action
   final VoidCallback? onAddToAll;
 
+  /// Favorite (už se nezobrazuje – necháváme jen kvůli kompatibilitě)
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
 
@@ -67,9 +68,10 @@ class PlaceCard extends StatelessWidget {
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        // ✅ zúžení karty
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -77,7 +79,7 @@ class PlaceCard extends StatelessWidget {
             Text(
               place.name,
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 17,
                 fontWeight: FontWeight.bold,
                 decoration: place.done ? TextDecoration.lineThrough : null,
                 color: place.done ? Colors.grey : null,
@@ -100,53 +102,42 @@ class PlaceCard extends StatelessWidget {
               ],
             ),
 
-            // ✅ Entry row (only if website exists)
-            if (hasWebsite) ...[
-              const SizedBox(height: 10),
+            const SizedBox(height: 8),
+
+            // ✅ Entry row + (ALL) Mark done v tom samém řádku
+            if (hasWebsite || !categoryMode) ...[
               Row(
                 children: [
-                  Text(
-                    "${s.entry}:",
-                    style: TextStyle(color: Colors.grey.shade800),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: () => _openWebsite(context),
-                    icon: const Icon(Icons.public),
-                    tooltip: "Website",
-                    visualDensity: VisualDensity.compact,
-                  ),
+                  if (hasWebsite) ...[
+                    Text(
+                      "${s.entry}:",
+                      style: TextStyle(color: Colors.grey.shade800),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () => _openWebsite(context),
+                      icon: const Icon(Icons.public),
+                      tooltip: "Website",
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                  const Spacer(),
+                  if (!categoryMode)
+                    GestureDetector(
+                      onTap: () => onToggleDone?.call(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.black12),
+                        ),
+                        child: Text(place.done ? s.done : s.markDone),
+                      ),
+                    ),
                 ],
               ),
+              const SizedBox(height: 8),
             ],
-
-            const SizedBox(height: 10),
-
-            // top row: Mark done (ALL) + Favorite (both)
-            Row(
-              children: [
-                if (!categoryMode)
-                  GestureDetector(
-                    onTap: () => onToggleDone?.call(),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.black12),
-                      ),
-                      child: Text(place.done ? s.done : s.markDone),
-                    ),
-                  ),
-                const Spacer(),
-                IconButton(
-                  onPressed: onToggleFavorite,
-                  icon: Icon(isFavorite ? Icons.star : Icons.star_border),
-                  tooltip: isFavorite ? s.saved : s.unsaved,
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
 
             // bottom actions: ALL vs CATEGORY
             if (categoryMode) ...[

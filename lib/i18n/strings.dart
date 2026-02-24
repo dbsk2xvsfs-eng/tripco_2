@@ -8,7 +8,7 @@ class S {
 
   static const _t = {
     "en": {
-      "dayPlan": "Your Day Plan ☀️",
+      "dayPlan": "Your Day Plan 📌",
       "locationNeeded": "Location access needed 📍",
       "refresh": "Refresh plan",
       "startFresh": "Start fresh",
