@@ -13,7 +13,7 @@ import 'navigation_sheet.dart';
 class PlaceCard extends StatelessWidget {
   final Place place;
 
-  
+  final Color? accentColor;
 
   final double originLat;
   final double originLng;
@@ -48,6 +48,9 @@ class PlaceCard extends StatelessWidget {
     this.onToggleDone,
     this.onAddToAll,
     this.categoryMode = false,
+
+    this.accentColor,
+
   });
 
   Future<void> _openWebsite(BuildContext context) async {
@@ -93,6 +96,7 @@ class PlaceCard extends StatelessWidget {
     final hasWebsite = website.isNotEmpty;
 
     return Card(
+      color: (accentColor ?? Colors.white).withOpacity(0.06),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
@@ -115,7 +119,12 @@ class PlaceCard extends StatelessWidget {
             // type / open / rating
             Row(
               children: [
-                Expanded(child: Text(place.type)),
+                Expanded(
+                  child: Text(
+                    place.type,
+                    style: TextStyle(color: accentColor ?? Colors.black87),
+                  ),
+                ),
                 if (place.openNow != null) ...[
                   const SizedBox(width: 10),
                   Text(place.openNow! ? s.open : s.closed),

@@ -1027,6 +1027,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                   originLat: _pos!.latitude,
                   originLng: _pos!.longitude,
                   routes: _routes,
+                  accentColor: _colorForTab(_targetCategoryForPrimaryType(place.primaryType)),
 
                   categoryMode: false,
                   onRemove: () => _removeFromAllById(place.id),
@@ -1053,6 +1054,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                   originLat: _pos!.latitude,
                   originLng: _pos!.longitude,
                   routes: _routes,
+                  accentColor: _colorForTab(
+                    _targetCategoryForPrimaryType(place.primaryType),
+                  ),
                   categoryMode: true,
                   onAddToAll: _allPlan.any((x) => x.id == place.id)
                       ? null
