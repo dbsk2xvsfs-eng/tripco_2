@@ -8,6 +8,8 @@ import '../models/place.dart';
 import '../services/routes_service.dart';
 import 'navigation_sheet.dart';
 
+
+
 class PlaceCard extends StatelessWidget {
   final Place place;
 
@@ -61,12 +63,15 @@ class PlaceCard extends StatelessWidget {
     }
   }
 
+
   double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
     const r = 6371000.0;
     final dLat = _degToRad(lat2 - lat1);
     final dLon = _degToRad(lon2 - lon1);
     final a = (sin(dLat / 2) * sin(dLat / 2)) +
-        cos(_degToRad(lat1)) * cos(_degToRad(lat2)) * (sin(dLon / 2) * sin(dLon / 2));
+        cos(_degToRad(lat1)) *
+            cos(_degToRad(lat2)) *
+            (sin(dLon / 2) * sin(dLon / 2));
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
     return r * c;
   }
@@ -122,59 +127,64 @@ class PlaceCard extends StatelessWidget {
 
             const SizedBox(height: 8),
 
-            // Entry + WWW + km + (Category) Add / (All) Mark done
-            if (hasWebsite || !categoryMode || (categoryMode && onAddToAll != null)) ...[
-              Row(
-                children: [
-                  if (hasWebsite) ...[
-                    Text(
-                      "${s.entry}:",
-                      style: TextStyle(color: Colors.grey.shade800),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () => _openWebsite(context),
-                      icon: const Icon(Icons.public),
-                      tooltip: "Website",
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _kmText(),
-                      style: TextStyle(color: Colors.grey.shade800),
-                    ),
-                  ],
-                  const Spacer(),
+// Entry + WWW + km + (Category) Add / (All) Mark done
+            Row(
+              children: [
+                Text(
+                  "${s.entry}:",
+                  style: TextStyle(color: Colors.grey.shade800),
+                ),
+                const SizedBox(width: 8),
 
-                  // ✅ ALL: Mark done v tom samém řádku
-                  if (!categoryMode)
-                    GestureDetector(
-                      onTap: () => onToggleDone?.call(),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.black12),
-                        ),
-                        child: Text(place.done ? s.done : s.markDone),
-                      ),
-                    ),
+                if (hasWebsite)
+                  IconButton(
+                    onPressed: () => _openWebsite(context),
+                    icon: const Icon(Icons.public),
+                    tooltip: "Website",
+                    visualDensity: VisualDensity.compact,
+                  )
+                else
+                  const SizedBox(width: 40), // drží stejné odsazení
 
-                  // ✅ CATEGORY: malé Add to All v tom samém řádku
-                  if (categoryMode && onAddToAll != null)
-                    TextButton(
-                      onPressed: onAddToAll,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                const SizedBox(width: 6),
+
+                // ✅ Vzdálenost se zobrazí VŽDY
+                Text(
+                  _kmText(),
+                  style: TextStyle(color: Colors.grey.shade800),
+                ),
+
+                const Spacer(),
+
+                // ✅ ALL: Mark done
+                if (!categoryMode)
+                  GestureDetector(
+                    onTap: () => onToggleDone?.call(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.black12),
                       ),
-                      child: const Text("Add to All"),
+                      child: Text(place.done ? s.done : s.markDone),
                     ),
-                ],
-              ),
-              const SizedBox(height: 8),
-            ],
+                  ),
+
+                // ✅ CATEGORY: malé Add to All
+                if (categoryMode && onAddToAll != null)
+                  TextButton(
+                    onPressed: onAddToAll,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text("Add to All"),
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
 
             // bottom actions: ALL only
             if (!categoryMode) ...[
