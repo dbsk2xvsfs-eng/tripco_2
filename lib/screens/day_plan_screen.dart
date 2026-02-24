@@ -215,6 +215,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   static const int _poolSize = 15;
   static const int _takeFromEachToAll = 2;
 
+
+  
+
+
   // ------------------- lifecycle -------------------
 
   @override
@@ -824,10 +828,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       await _loadCategoryPools();
 
       _allPlan = _buildInitialAllFromPools();
-      _hasUnsavedChanges = false;
-      await PlanStorage.saveCurrentPlan(_allPlan);
+      await PlanStorage.savePlan(_allPlan);
 
       setState(() {
+        _hasUnsavedChanges = false; // ✅ po refresh je to zase Tips
         _loading = false;
       });
     } catch (e) {
@@ -919,7 +923,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
               child: Row(
                 children: [
                   ChoiceChip(
-                    label: const Text("All"),
+                    label: Text(_hasUnsavedChanges ? "Yours" : "Tips"),
                     selected: _selectedTab == "All",
                     onSelected: (_) => setState(() => _selectedTab = "All"),
                   ),
