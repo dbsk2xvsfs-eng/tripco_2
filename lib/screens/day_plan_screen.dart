@@ -44,6 +44,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   // ✅ Kategorie = katalog (15 položek), jen Add to All
   final Map<String, List<Place>> _categoryPools = {};
 
+  final ScrollController _listCtrl = ScrollController();
+
+
   String _selectedTab = "All";
   bool _hasUnsavedChanges = false;
 
@@ -171,6 +174,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   @override
   void dispose() {
     LocationService.effectivePosition.removeListener(_effectivePosListener);
+
+    _listCtrl.dispose();
+
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -956,7 +962,19 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                     selectedColor: tipsAccent.withOpacity(0.18),
                     backgroundColor: tipsAccent.withOpacity(0.10),
                     labelStyle: TextStyle(color: tipsAccent),
-                    onSelected: (_) => setState(() => _selectedTab = "All"),
+                    onSelected: (_) {
+                      setState(() => _selectedTab = "All");
+
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_listCtrl.hasClients) {
+                          _listCtrl.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeOut,
+                          );
+                         }
+                      });
+                    },
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -985,7 +1003,19 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                           selectedColor: accent.withOpacity(0.18),
                           backgroundColor: accent.withOpacity(0.10),
                           labelStyle: TextStyle(color: accent),
-                          onSelected: (_) => setState(() => _selectedTab = t),
+                          onSelected: (_) {
+                            setState(() => _selectedTab = t);
+
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (_listCtrl.hasClients) {
+                                _listCtrl.animateTo(
+                                  0,
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOut,
+                                );
+                              }
+                            });
+                          },
                         );
                       },
                     ),
@@ -998,6 +1028,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
           Expanded(
             child: _selectedTab == "All"
                 ? ReorderableListView.builder(
+
+              scrollController: _listCtrl,
+
               padding: const EdgeInsets.all(12),
               itemCount: list.length,
               onReorder: _reorderAll,
@@ -1023,6 +1056,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
               },
             )
                 : ListView.builder(
+
+              controller: _listCtrl,
+
               padding: const EdgeInsets.all(12),
               itemCount: list.length,
               itemBuilder: (context, i) {
