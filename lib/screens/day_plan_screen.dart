@@ -140,7 +140,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   String _emojiForTab(String tab) => _catEmoji[tab] ?? "✨";
 
   // ------------------- lifecycle -------------------
-
+  bool _ignoreEffectivePosChanges = false;
   late final VoidCallback _effectivePosListener;
 
   @override
@@ -162,9 +162,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
     // Listener: když se změní efektivní poloha (GPS <-> město), přestav plán
     _effectivePosListener = () {
+      if (_ignoreEffectivePosChanges) return;
+
       final p = LocationService.effectivePosition.value;
       if (p == null) return;
-      // přepnutí lokace = přepočet všeho
       _applyNewLocationAndRebuild(p);
     };
     LocationService.effectivePosition.addListener(_effectivePosListener);
@@ -269,6 +270,59 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
         _loading = false;
         _error = e.toString();
       });
+    }
+  }
+
+  Future<void> _applyLocationAndReloadPoolsOnly({
+    required String label,
+    required double lat,
+    required double lng,
+  }) async {
+    if (!mounted) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+      _selectedTab = "All";
+    });
+
+    _ignoreEffectivePosChanges = true;
+    try {
+      // nastav manual lokaci (změní label nahoře + effectivePosition)
+      LocationService.setManualLocation(
+        label: label,
+        latitude: lat,
+        longitude: lng,
+      );
+
+      // nastav _pos tak, aby se vše počítalo od nového místa
+      _pos = Position(
+        latitude: lat,
+        longitude: lng,
+        timestamp: DateTime.now(),
+        accuracy: 0,
+        altitude: 0,
+        heading: 0,
+        speed: 0,
+        speedAccuracy: 0,
+        altitudeAccuracy: 0, // pokud ti to hází error, smaž tento řádek (dle verze geolocatoru)
+        headingAccuracy: 0,  // pokud ti to hází error, smaž tento řádek (dle verze geolocatoru)
+      );
+
+      // reload katalogů pro nové město
+      _categoryPools.clear();
+      await _loadCategoryPools();
+
+      if (!mounted) return;
+      setState(() => _loading = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
+    } finally {
+      _ignoreEffectivePosChanges = false;
     }
   }
 
@@ -528,7 +582,22 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
   // ------------------- Save prompt for Refresh/Delete -------------------
 
+
+  String _cityKeyFromLabel(String label) {
+    final t = label.trim();
+    if (t.isEmpty) return "Unknown";
+    // vezmeme jen první část před čárkou -> New York, Spojené státy... => New York
+    return t.split(',').first.trim();
+  }
+
   Future<String> _resolveCityName() async {
+    // 1) Když máš ručně vybrané město, použij přímo label (nejspolehlivější)
+    final label = LocationService.locationLabel.value.trim();
+    if (label.isNotEmpty && label.toUpperCase() != "GPS" && label.toLowerCase() != "unknown") {
+      return _cityKeyFromLabel(label);
+    }
+
+    // 2) GPS / fallback: reverse geocode z aktuální pozice
     if (_pos == null) return "Unknown";
     if (_apiKey.isEmpty) return "Unknown";
 
@@ -536,38 +605,37 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     final lng = _pos!.longitude;
 
     final url = Uri.parse(
-      "https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$_apiKey",
+      "https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$_apiKey&language=en",
     );
 
     final resp = await http.get(url);
-    if (resp.statusCode != 200) return "Unknown";
+    if (resp.statusCode != 200) return label.isNotEmpty ? _cityKeyFromLabel(label) : "Unknown";
 
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final results = (data["results"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
 
-    for (final r in results) {
-      final comps = (r["address_components"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      for (final c in comps) {
-        final types = (c["types"] as List?)?.cast<String>() ?? const [];
-        if (types.contains("locality")) {
-          final name = (c["long_name"] ?? "").toString().trim();
-          if (name.isNotEmpty) return name;
+    String? pickFromTypes(Set<String> wanted) {
+      for (final r in results) {
+        final comps = (r["address_components"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+        for (final c in comps) {
+          final types = (c["types"] as List?)?.cast<String>() ?? const [];
+          if (types.any(wanted.contains)) {
+            final name = (c["long_name"] ?? "").toString().trim();
+            if (name.isNotEmpty) return name;
+          }
         }
       }
+      return null;
     }
 
-    for (final r in results) {
-      final comps = (r["address_components"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      for (final c in comps) {
-        final types = (c["types"] as List?)?.cast<String>() ?? const [];
-        if (types.contains("administrative_area_level_1")) {
-          final name = (c["long_name"] ?? "").toString().trim();
-          if (name.isNotEmpty) return name;
-        }
-      }
-    }
+    // pořadí: locality -> postal_town -> admin_area_level_2 -> admin_area_level_1
+    final city =
+        pickFromTypes({"locality"}) ??
+            pickFromTypes({"postal_town"}) ??
+            pickFromTypes({"administrative_area_level_2"}) ??
+            pickFromTypes({"administrative_area_level_1"});
 
-    return "Unknown";
+    return city ?? (label.isNotEmpty ? _cityKeyFromLabel(label) : "Unknown");
   }
 
   Future<void> _saveCurrentPlanToSaved() async {
@@ -655,12 +723,24 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                           title: Text(it.city),
                           subtitle: Text("${it.plan.length} míst"),
                           onTap: () async {
+                            // 1) přepni lokaci + reload pools
+                            await _applyLocationAndReloadPoolsOnly(
+                              label: it.city,   // nebo it.cityLabel pokud máš
+                              lat: it.lat,
+                              lng: it.lng,
+                            );
+
+                            // 2) teprve potom nahraj uložený plán (Yours)
+                            if (!mounted) return;
                             setState(() {
                               _allPlan = List<Place>.from(it.plan);
                               _sortAllByDistance();
                               _selectedTab = "All";
+                              _hasUnsavedChanges = false;
                             });
-                            await PlanStorage.savePlan(_allPlan);
+
+                            await PlanStorage.saveCurrentPlan(_allPlan);
+
                             if (ctx.mounted) Navigator.pop(ctx);
                           },
                           trailing: IconButton(
@@ -1164,21 +1244,30 @@ class _SummaryBar extends StatelessWidget {
           ValueListenableBuilder<String>(
             valueListenable: LocationService.locationLabel,
             builder: (_, label, __) {
-              return InkWell(
-                borderRadius: BorderRadius.circular(10),
-                onTap: onPickLocation,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        label,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.keyboard_arrow_down, size: 18),
-                    ],
+              return Expanded(   // ✅ klíčové
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: onPickLocation,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Flexible(  // ✅ klíčové
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.keyboard_arrow_down, size: 18),
+                      ],
+                    ),
                   ),
                 ),
               );
