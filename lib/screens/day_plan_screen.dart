@@ -21,7 +21,7 @@ import '../services/place_mapper.dart';
 
 import '../widgets/place_card.dart';
 import '../widgets/replace_sheet.dart';
-
+import 'plan_map_screen.dart';
 
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
@@ -182,6 +182,25 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+
+  void _openPlanMap() {
+    if (_pos == null) return;
+
+    final places = _currentList(); // ✅ podle tabu (All nebo kategorie)
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PlanMapScreen(
+          title: _selectedTab == "All" ? "Yours" : _selectedTab,
+          places: List<Place>.from(places),
+          originLat: _pos!.latitude,
+          originLng: _pos!.longitude,
+          routes: _routes,
+        ),
+      ),
+    );
+  }
+
 
   // ✅ autosave při odchodu do backgroundu / zavření
   @override
@@ -1000,6 +1019,12 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.map_outlined),
+            tooltip: "Map",
+            onPressed: _openPlanMap,
+          ),
+
+          IconButton(
             icon: const Icon(Icons.ios_share),
             tooltip: s.share,
             onPressed: _shareAll,
@@ -1331,7 +1356,7 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
   List<_PickedCity> _items = [];
   _PickedCity? _selected;
 
-  final _apiKey = const String.fromEnvironment('AIzaSyCZJnDieH6c9WoQVnjTk7iluHy2yh_DI78');  // ✅ přidej
+  static const _apiKey = String.fromEnvironment('GOOGLE_API_KEY');  // ✅ přidej
 
   int _callId = 0;
 

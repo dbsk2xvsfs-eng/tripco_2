@@ -6,6 +6,10 @@
         android:label="tripco_2"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="TVUJ_KLIC"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"
