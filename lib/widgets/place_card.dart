@@ -8,8 +8,6 @@ import '../models/place.dart';
 import '../services/routes_service.dart';
 import 'navigation_sheet.dart';
 
-
-
 class PlaceCard extends StatelessWidget {
   final Place place;
 
@@ -48,42 +46,50 @@ class PlaceCard extends StatelessWidget {
     this.onToggleDone,
     this.onAddToAll,
     this.categoryMode = false,
-
     this.accentColor,
-
   });
+
+  Uri? _toSafeUri(String raw) {
+    final u = raw.trim();
+    if (u.isEmpty) return null;
+
+    // doplníme schéma, pokud chybí (muzeumdobris.cz -> https://muzeumdobris.cz)
+    final fixed = (u.startsWith('http://') || u.startsWith('https://')) ? u : 'https://$u';
+
+    final uri = Uri.tryParse(fixed);
+    if (uri == null) return null;
+
+    // minimální validace
+    if (uri.host.isEmpty) return null;
+
+    return uri;
+  }
+
+  Future<void> _launchExternal(BuildContext context, String rawUrl, String failText) async {
+    final uri = _toSafeUri(rawUrl);
+    if (uri == null) return;
+
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failText)),
+      );
+    }
+  }
 
   Future<void> _openWebsite(BuildContext context) async {
     final url = (place.websiteUrl ?? "").trim();
     if (url.isEmpty) return;
 
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not open website")),
-      );
-    }
+    await _launchExternal(context, url, "Could not open website");
   }
-
 
   Future<void> _openGoogleMapsPlace(BuildContext context) async {
-    final url = (place.googleMapsUri ?? "").trim(); // pokud ti to nesedí, bude to u tebe nejspíš googleMapsUri
+    final url = (place.googleMapsUri ?? "").trim();
     if (url.isEmpty) return;
 
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not open Google Maps")),
-      );
-    }
+    await _launchExternal(context, url, "Could not open Google Maps");
   }
-
 
   double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
     const r = 6371000.0;
@@ -155,7 +161,7 @@ class PlaceCard extends StatelessWidget {
                 const SizedBox(width: 6),
 
                 // ✅ HORNÍ WWW = Google Maps detail (foto, popis, recenze)
-                if ((place.googleMapsUri ?? "").isNotEmpty)
+                if ((place.googleMapsUri ?? "").trim().isNotEmpty)
                   IconButton(
                     onPressed: () => _openGoogleMapsPlace(context),
                     icon: const Icon(Icons.public),
@@ -169,7 +175,7 @@ class PlaceCard extends StatelessWidget {
 
             const SizedBox(height: 8),
 
-// Entry + WWW + km + (Category) Add / (All) Mark done
+            // Entry + WWW + km + (Category) Add / (All) Mark done
             Row(
               children: [
                 Text(

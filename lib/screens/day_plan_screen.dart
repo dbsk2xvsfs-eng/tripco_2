@@ -22,6 +22,7 @@ import '../services/place_mapper.dart';
 import '../widgets/place_card.dart';
 import '../widgets/replace_sheet.dart';
 
+
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
 
@@ -278,18 +279,20 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (_) => const _CityPickerSheet(),
+      builder: (_) => _CityPickerSheet(
+        apiKey: _apiKey,
+        biasLat: _pos?.latitude,
+        biasLng: _pos?.longitude,
+      ),
     );
 
     if (picked == null) return;
 
     if (picked.useGps) {
-      // návrat na GPS -> LocationService zavolá effectivePosition listener
       await LocationService.clearManualLocation();
       return;
     }
 
-    // nastavení manuálního města -> LocationService zavolá effectivePosition listener
     LocationService.setManualLocation(
       label: picked.label,
       latitude: picked.lat,
@@ -892,7 +895,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   Widget build(BuildContext context) {
     final s = S.of(context);
     final tipsAccent = _hasUnsavedChanges ? _colorForTab("Attraction") : _colorForTab("Nature");
-    final tipsEmoji = _hasUnsavedChanges ? "🧾" : "💡";
+    final tipsEmoji = _hasUnsavedChanges ? "📍" : "📌";
 
     if (_loading) {
       return Scaffold(
@@ -1209,18 +1212,37 @@ class _PickedCity {
         useGps = true;
 }
 
+
+
 class _CityPickerSheet extends StatefulWidget {
-  const _CityPickerSheet();
+  final String apiKey;
+  final double? biasLat;
+  final double? biasLng;
+
+  const _CityPickerSheet({
+    required this.apiKey,
+    this.biasLat,
+    this.biasLng,
+  });
 
   @override
   State<_CityPickerSheet> createState() => _CityPickerSheetState();
 }
+
+class _GPrediction {
+  final String label;
+  final String placeId;
+  const _GPrediction({required this.label, required this.placeId});
+}
+
 
 class _CityPickerSheetState extends State<_CityPickerSheet> {
   final _controller = TextEditingController();
   bool _loading = false;
   List<_PickedCity> _items = [];
   _PickedCity? _selected;
+
+  final _apiKey = const String.fromEnvironment('AIzaSyCZJnDieH6c9WoQVnjTk7iluHy2yh_DI78');  // ✅ přidej
 
   int _callId = 0;
 
@@ -1245,111 +1267,127 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
     return sb.toString();
   }
 
-  Future<List<_PickedCity>> _fetchSuggestions(String query) async {
-    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-      'q': query,
-      'format': 'json',
-      'addressdetails': '1',
-      'limit': '10',
-      'accept-language': 'cs',
+
+
+  Future<List<_GPrediction>> _googleCitiesAutocomplete(String input) async {
+    final params = <String, String>{
+      "input": input,
+      "types": "(cities)",
+      "language": "cs",
+      "key": widget.apiKey,
+    };
+
+    // ✅ bias jen pro relevanci, pořád celý svět
+    if (widget.biasLat != null && widget.biasLng != null) {
+      params["location"] = "${widget.biasLat},${widget.biasLng}";
+      params["radius"] = "200000"; // 200 km bias
+    }
+
+    final uri = Uri.https("maps.googleapis.com", "/maps/api/place/autocomplete/json", params);
+
+    final resp = await http.get(uri);
+    debugPrint("G_AUTOCOMPLETE: $uri");
+    debugPrint("G_AUTOCOMPLETE status=${resp.statusCode} len=${resp.body.length}");
+
+    if (resp.statusCode != 200) return const [];
+
+    final root = jsonDecode(resp.body) as Map<String, dynamic>;
+
+    final status = (root["status"] ?? "").toString();
+    if (status != "OK" && status != "ZERO_RESULTS") {
+      // tady uvidíš důvod typu REQUEST_DENIED / INVALID_REQUEST
+      debugPrint("G_AUTOCOMPLETE status=$status error=${root["error_message"]}");
+      return const [];
+    }
+
+    final preds = (root["predictions"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+
+    return preds.map((p) {
+      final desc = (p["description"] ?? "").toString().trim();
+      final placeId = (p["place_id"] ?? "").toString().trim();
+      return _GPrediction(label: desc, placeId: placeId);
+    }).where((p) => p.label.isNotEmpty && p.placeId.isNotEmpty).toList();
+  }
+
+
+  Future<({double lat, double lng})?> _googlePlaceDetailsLatLng(String placeId) async {
+    final uri = Uri.https("maps.googleapis.com", "/maps/api/place/details/json", {
+      "place_id": placeId,
+      "fields": "geometry,name",
+      "key": widget.apiKey,
+      "language": "cs",
     });
 
-    final resp = await http.get(
-      uri,
-      headers: const {
-        'User-Agent': 'TripcoApp/1.0',
-      },
-    );
+    final resp = await http.get(uri);
+    debugPrint("G_DETAILS: $uri");
+    debugPrint("G_DETAILS status=${resp.statusCode} len=${resp.body.length}");
 
-    if (resp.statusCode != 200) {
-      throw Exception('Nominatim error ${resp.statusCode}');
+    if (resp.statusCode != 200) return null;
+
+    final root = jsonDecode(resp.body) as Map<String, dynamic>;
+
+    final status = (root["status"] ?? "").toString();
+    if (status != "OK") {
+      debugPrint("G_DETAILS status=$status error=${root["error_message"]}");
+      return null;
     }
 
-    final data = (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+    final result = (root["result"] as Map?)?.cast<String, dynamic>();
+    final geom = (result?["geometry"] as Map?)?.cast<String, dynamic>();
+    final loc = (geom?["location"] as Map?)?.cast<String, dynamic>();
+
+    final lat = (loc?["lat"] as num?)?.toDouble();
+    final lng = (loc?["lng"] as num?)?.toDouble();
+    if (lat == null || lng == null) return null;
+
+    return (lat: lat, lng: lng);
+  }
+
+
+
+
+  Future<List<_PickedCity>> _fetchSuggestions(String query) async {
+    final q = query.trim();
+    if (q.length < 2) return const [];
+
+    // 1) autocomplete
+    final preds = await _googleCitiesAutocomplete(q);
+
+    // 2) details -> lat/lng
     final out = <_PickedCity>[];
-
-    for (final e in data) {
-      final lat = double.tryParse((e['lat'] ?? '').toString());
-      final lon = double.tryParse((e['lon'] ?? '').toString());
-      if (lat == null || lon == null) continue;
-
-      // addressdetails=1 => Nominatim vrací "address" objekt
-      final address = (e['address'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-
-      // Město/obec se může jmenovat různě podle typu sídla
-      final city = (address['city'] ??
-          address['town'] ??
-          address['village'] ??
-          address['municipality'] ??
-          address['hamlet'])
-          ?.toString()
-          .trim();
-
-      // kraj / okres / stát (na CZ typicky state = kraj)
-      final state = address['state']?.toString().trim(); // Liberecký kraj
-      final county = address['county']?.toString().trim(); // okres
-      final country = address['country']?.toString().trim(); // Czechia
-
-      if (city == null || city.isEmpty) {
-        // fallback, když Nominatim nevrátí city/town/village
-        final display = (e['display_name'] ?? '').toString().trim();
-        if (display.isEmpty) continue;
-        final first = display.split(',').first.trim();
-        if (first.isEmpty) continue;
-        out.add(_PickedCity(label: first, lat: lat, lng: lon));
-        continue;
-      }
-
-      // Label: jen město, případně "město, kraj"
-      // (kraj preferujeme před okresem; když není, vezmeme okres; když není, stát)
-      final extra = (state != null && state.isNotEmpty)
-          ? state
-          : (county != null && county.isNotEmpty)
-          ? county
-          : (country != null && country.isNotEmpty)
-          ? country
-          : null;
-
-      final label = (extra == null || extra.isEmpty) ? city : "$city, $extra";
-
-      out.add(_PickedCity(label: label, lat: lat, lng: lon));
+    for (final p in preds.take(10)) {
+      final ll = await _googlePlaceDetailsLatLng(p.placeId);
+      if (ll == null) continue;
+      out.add(_PickedCity(label: p.label, lat: ll.lat, lng: ll.lng));
     }
-
-    // Volitelné: odfiltruj duplicity (občas Nominatim vrací víc řádků pro totéž)
-    final seen = <String>{};
-    final unique = <_PickedCity>[];
-    for (final it in out) {
-      if (seen.add("${it.label}|${it.lat.toStringAsFixed(5)}|${it.lng.toStringAsFixed(5)}")) {
-        unique.add(it);
-      }
-    }
-
-    return unique;
+    return out;
   }
 
   Future<void> _search(String q) async {
     final query = q.trim();
     final myCall = ++_callId;
 
+    // ✅ KLÍČOVÉ: od 2 znaků (tím zmizí Brazílie při "br")
     if (query.length < 2) {
+      if (!mounted) return;
       setState(() {
         _items = [];
         _selected = null;
+        _loading = false;
       });
       return;
     }
 
-    // ✅ debounce 250ms
+    // debounce
     await Future.delayed(const Duration(milliseconds: 250));
     if (!mounted) return;
     if (myCall != _callId) return;
 
     setState(() => _loading = true);
     try {
-      // 1) normální dotaz
       var out = await _fetchSuggestions(query);
 
-      // 2) fallback bez diakritiky (když nic nenajde)
+      // fallback bez diakritiky (když nic nenajde)
       final noDia = _stripDiacritics(query);
       if (out.isEmpty && noDia != query) {
         out = await _fetchSuggestions(noDia);
@@ -1407,6 +1445,7 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                       setState(() {
                         _items = [];
                         _selected = null;
+                        _loading = false;
                       });
                     },
                     icon: const Icon(Icons.clear),
@@ -1417,7 +1456,6 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
               const SizedBox(height: 10),
               if (_loading) const LinearProgressIndicator(),
               const SizedBox(height: 8),
-
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
@@ -1426,9 +1464,7 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                   label: const Text("Použít GPS"),
                 ),
               ),
-
               const SizedBox(height: 4),
-
               Flexible(
                 child: ListView.separated(
                   shrinkWrap: true,
@@ -1446,7 +1482,6 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                   },
                 ),
               ),
-
               const SizedBox(height: 10),
               Row(
                 children: [
