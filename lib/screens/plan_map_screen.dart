@@ -6,6 +6,9 @@ import '../models/place.dart';
 import '../services/routes_service.dart';
 import '../widgets/navigation_sheet.dart';
 
+import '../services/navigation_service.dart';
+import '../models/transport_option.dart';
+
 class PlanMapScreen extends StatefulWidget {
   final String title;
   final List<Place> places;
@@ -29,6 +32,77 @@ class PlanMapScreen extends StatefulWidget {
 class _PlanMapScreenState extends State<PlanMapScreen> {
   GoogleMapController? _map;
   Place? _selected;
+
+
+  void _openRidePicker(Place place) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  "Choose your ride 🧭",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 10),
+
+                ListTile(
+                  leading: const Icon(Icons.directions_walk),
+                  title: const Text("Walking"),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await NavigationService.openNavigation(
+                      destLat: place.lat,
+                      destLng: place.lng,
+                      type: TransportType.walk,
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.directions_transit),
+                  title: const Text("Public transport"),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await NavigationService.openNavigation(
+                      destLat: place.lat,
+                      destLng: place.lng,
+                      type: TransportType.transit,
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.directions_car),
+                  title: const Text("Car"),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await NavigationService.openNavigation(
+                      destLat: place.lat,
+                      destLng: place.lng,
+                      type: TransportType.car,
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 6),
+                const Text(
+                  "Times are estimates (MVP).",
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
   @override
   void dispose() {
@@ -113,7 +187,6 @@ class _PlanMapScreenState extends State<PlanMapScreen> {
 
     await c.animateCamera(CameraUpdate.newLatLngBounds(bounds, 70));
   }
-
   void _openNavigate(Place place) {
     showModalBottomSheet(
       context: context,
@@ -192,7 +265,7 @@ class _PlanMapScreenState extends State<PlanMapScreen> {
                         ),
                         const SizedBox(width: 10),
                         ElevatedButton(
-                          onPressed: () => _openNavigate(_selected!),
+                          onPressed: () => _openRidePicker(_selected!),
                           child: const Text("Navigate"),
                         ),
                       ],
