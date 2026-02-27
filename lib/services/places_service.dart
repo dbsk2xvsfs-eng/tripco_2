@@ -8,13 +8,14 @@ class PlacesService {
   final String apiKey;
   PlacesService({required this.apiKey});
 
-  /// PŮVODNÍ METODA – ZACHOVÁNO BEZE ZMĚNY (API i chování)
-  /// Voláš ji když už máš lat/lng.
+  /// PŮVODNÍ METODA – voláš ji když už máš lat/lng.
+  /// Přidán parametr rankPreference (DISTANCE/POPULARITY), default DISTANCE.
   Future<List<Map<String, dynamic>>> nearby({
     required double lat,
     required double lng,
     int radiusMeters = 6000,
     int maxResults = 12,
+    String rankPreference = "DISTANCE", // ✅ "DISTANCE" | "POPULARITY"
     List<String> includedTypes = const [
       "tourist_attraction",
       "museum",
@@ -35,6 +36,8 @@ class PlacesService {
     final safeRadius = radiusMeters.clamp(0, 50000);
     final safeMaxResults = maxResults.clamp(1, 20);
 
+    final rp = (rankPreference.toUpperCase() == "POPULARITY") ? "POPULARITY" : "DISTANCE";
+
     final url = Uri.parse("https://places.googleapis.com/v1/places:searchNearby");
 
     final headers = {
@@ -45,21 +48,20 @@ class PlacesService {
         "places.displayName",
         "places.location",
         "places.primaryType",
-        "places.types", // ✅ důležité pro Cafe/Restaurant fallback
+        "places.types",
         "places.rating",
         "places.userRatingCount",
         "places.currentOpeningHours",
         "places.websiteUri",
         "places.googleMapsUri",
-        // volitelné (když chceš někdy zobrazovat přímo text od Googlu)
         "places.primaryTypeDisplayName",
       ].join(","),
     };
 
-    final body = {
+    final body = <String, dynamic>{
       "includedTypes": includedTypes,
       "maxResultCount": safeMaxResults,
-      "rankPreference": "DISTANCE", // ✅ nejbližší první
+      "rankPreference": rp,
       "locationRestriction": {
         "circle": {
           "center": {"latitude": lat, "longitude": lng},
@@ -69,23 +71,23 @@ class PlacesService {
     };
 
     final resp = await http.post(url, headers: headers, body: jsonEncode(body));
+
     if (resp.statusCode != 200) {
       throw Exception("Places API error ${resp.statusCode}: ${resp.body}");
     }
 
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
-    final places = (data["places"] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final places = (data["places"] as List?)?.cast<Map<String, dynamic>>() ?? <Map<String, dynamic>>[];
     return places;
   }
 
   /// NOVÉ (NEINVASIVNÍ): použije "efektivní" polohu z LocationService:
   /// - pokud je vybrané město (MANUAL), použije jeho souřadnice
   /// - jinak použije GPS polohu zařízení
-  ///
-  /// Vrací stejné výsledky jako nearby(), jen nemusíš posílat lat/lng.
   Future<List<Map<String, dynamic>>> nearbyFromEffectiveLocation({
     int radiusMeters = 6000,
     int maxResults = 12,
+    String rankPreference = "DISTANCE",
     List<String> includedTypes = const [
       "tourist_attraction",
       "museum",
@@ -102,8 +104,6 @@ class PlacesService {
   }) async {
     final Position? pos = await LocationService.getEffectiveLocation();
     if (pos == null) {
-      // stejné chování jako bys neměl GPS – nechávám to jako exception,
-      // ať se to v UI dá zachytit (snackbar, fallback apod.)
       throw Exception("Effective location is null (GPS unavailable and no manual city selected).");
     }
 
@@ -112,6 +112,7 @@ class PlacesService {
       lng: pos.longitude,
       radiusMeters: radiusMeters,
       maxResults: maxResults,
+      rankPreference: rankPreference,
       includedTypes: includedTypes,
     );
   }

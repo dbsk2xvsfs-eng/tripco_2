@@ -30,6 +30,11 @@ class DayPlanScreen extends StatefulWidget {
   State<DayPlanScreen> createState() => _DayPlanScreenState();
 }
 
+enum _PopularityFilter { all, top }
+
+_PopularityFilter _popFilter = _PopularityFilter.all;
+
+
 class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserver {
   Position? _pos;
   bool _loading = true;
@@ -50,6 +55,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
   String _selectedTab = "All";
   bool _hasUnsavedChanges = false;
+
+
 
   static const UserProfile _fixedProfile = UserProfile.solo;
   static const _apiKey = String.fromEnvironment('GOOGLE_API_KEY');
@@ -186,13 +193,13 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   void _openPlanMap() {
     if (_pos == null) return;
 
-    final places = _currentList(); // ✅ podle tabu (All nebo kategorie)
+    final list = _applyPopularityFilter(_currentList()); // ✅ podle tabu (All nebo kategorie)
 
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PlanMapScreen(
           title: _selectedTab == "All" ? "Yours" : _selectedTab,
-          places: List<Place>.from(places),
+          places: List<Place>.from(_applyPopularityFilter(_currentList())),
           originLat: _pos!.latitude,
           originLng: _pos!.longitude,
           routes: _routes,
@@ -430,21 +437,40 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     final originLat = _pos!.latitude;
     final originLng = _pos!.longitude;
 
+    // helper pro TOP řazení (rating + počet hodnocení)
+    int popScore(Place p) {
+      final r = p.rating ?? 0.0;          // 0..5
+      final c = p.userRatingsTotal ?? 0;  // 0..N
+      // rating je důležitý, ale počet hlasů dělá “turisticky populární”
+      return (r * 1000).round() + c;
+    }
+
     for (final entry in _categoryConfig.entries) {
       final key = entry.key;
       final cfg = entry.value;
 
-      final radius = min(cfg.radiusMeters, 50000);
+      final isTop = _popFilter == _PopularityFilter.top;
 
+// např. TOP hledá do 20 km
+      final normalRadius = min(cfg.radiusMeters, 50000);
+      final topRadius = 20000; // 🔥 tady nastavíš TOP vzdálenost (v metrech)
+
+      final radius = isTop
+          ? min(topRadius, 50000)
+          : normalRadius;
+
+      // ✅ v TOP chceme POPULARITY a hodně kandidátů (20 je max)
       final raw = await _places.nearby(
         lat: originLat,
         lng: originLng,
         radiusMeters: radius,
         maxResults: 20,
+        rankPreference: isTop ? "POPULARITY" : "DISTANCE",
         includedTypes: cfg.includedTypes.toList(),
       );
 
       int minutesSeed = 6;
+
       final mapped = raw
           .map((p) {
         minutesSeed += 1;
@@ -458,12 +484,21 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       })
           .toList();
 
+      // ✅ TOP: seřadit podle popularity, fallback dle vzdálenosti
       mapped.sort((a, b) {
+        if (isTop) {
+          final sa = popScore(a);
+          final sb = popScore(b);
+          final s = sb.compareTo(sa); // vyšší score první
+          if (s != 0) return s;
+        }
+
         final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
         final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
         return da.compareTo(db);
       });
 
+      // dedupe + omezit na poolSize
       final uniq = <String>{};
       final out = <Place>[];
       for (final pl in mapped) {
@@ -532,6 +567,30 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     if (_selectedTab == "All") return _allPlan;
     return _categoryPools[_selectedTab] ?? const <Place>[];
   }
+
+  bool _isTopPlace(Place p) {
+  final r = p.rating ?? 0.0;
+  final c = p.userRatingsTotal ?? 0;
+
+  // Restaurants/cafes mají obvykle hodně hodnocení -> přísnější práh
+  final pt = (p.primaryType ?? "").toLowerCase();
+  final isFood = pt == "restaurant" || pt == "cafe" || pt == "coffee_shop" || pt == "bakery" || pt == "tea_house";
+
+  if (isFood) {
+  return r >= 4.4 && c >= 300;
+  }
+
+  // Ostatní POI: mírně mírnější
+  return r >= 4.3 && c >= 200;
+  }
+
+  List<Place> _applyPopularityFilter(List<Place> input) {
+  if (_popFilter == _PopularityFilter.all) return input;
+
+  // zachovej pořadí, jen filtruj
+  return input.where(_isTopPlace).toList();
+  }
+
 
   // ------------------- Category routing helpers -------------------
 
@@ -1011,7 +1070,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     }
 
     final tabs = _tabs();
-    final list = _currentList();
+
+    final list = _applyPopularityFilter(_currentList());
+
 
     return Scaffold(
       appBar: AppBar(
@@ -1051,12 +1112,15 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
             onClear: _clearAllWithConfirm,
             onPickLocation: _openCityPicker, // ✅ tohle otevře dialog s městem
           ),
+
           SizedBox(
             height: 44,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
+
+                  // ---------------- ALL (Tips / Yours) ----------------
                   ChoiceChip(
                     label: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1080,11 +1144,75 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                             duration: const Duration(milliseconds: 250),
                             curve: Curves.easeOut,
                           );
-                         }
+                        }
                       });
                     },
                   ),
+
                   const SizedBox(width: 8),
+
+                  // ---------------- ⭐ TOP FILTER ----------------
+
+                  ChoiceChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Text("⭐"),
+                        SizedBox(width: 6),
+                        Text("Top"),
+                      ],
+                    ),
+                    selected: _popFilter == _PopularityFilter.top,
+                    selectedColor: Colors.amber.withOpacity(0.22),
+                    backgroundColor: Colors.amber.withOpacity(0.10),
+                    labelStyle: const TextStyle(color: Colors.amber),
+                    onSelected: (v) async {
+                      // 1) přepnout filtr
+                      setState(() {
+                        _popFilter = v ? _PopularityFilter.top : _PopularityFilter.all;
+                        _loading = true; // optional: můžeš klidně vyhodit, pokud nechceš "loading"
+                      });
+
+                      try {
+                        // 2) přenačíst katalogy podle filtru (DISTANCE vs POPULARITY)
+                        _categoryPools.clear();
+                        await _loadCategoryPools();
+
+                        // 3) když jsme v Tips/Yours (All), přestavět "Tips" (když nejsou user změny)
+                        //    - pokud máš uživatelský plán (hasUnsavedChanges), nech ho být
+                        if (!_hasUnsavedChanges) {
+                          _allPlan = _buildInitialAllFromPools();
+                          await PlanStorage.saveCurrentPlan(_allPlan);
+                        } else {
+                          // jen přeuspořádej aktuální All (ať se to chová konzistentně)
+                          _sortAllByDistance();
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          setState(() => _error = e.toString());
+                        }
+                      } finally {
+                        if (mounted) {
+                          setState(() => _loading = false);
+                        }
+                      }
+
+                      // 4) scroll nahoru
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_listCtrl.hasClients) {
+                          _listCtrl.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeOut,
+                          );
+                        }
+                      });
+                    },
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // ---------------- CATEGORY TABS ----------------
                   Expanded(
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
@@ -1132,6 +1260,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
               ),
             ),
           ),
+
           const SizedBox(height: 6),
           Expanded(
             child: _selectedTab == "All"
