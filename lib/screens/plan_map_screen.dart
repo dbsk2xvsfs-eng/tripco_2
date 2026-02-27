@@ -6,9 +6,6 @@ import '../models/place.dart';
 import '../services/routes_service.dart';
 import '../widgets/navigation_sheet.dart';
 
-import '../services/navigation_service.dart';
-import '../models/transport_option.dart';
-
 class PlanMapScreen extends StatefulWidget {
   final String title;
   final List<Place> places;
@@ -32,77 +29,6 @@ class PlanMapScreen extends StatefulWidget {
 class _PlanMapScreenState extends State<PlanMapScreen> {
   GoogleMapController? _map;
   Place? _selected;
-
-
-  void _openRidePicker(Place place) {
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (_) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  "Choose your ride 🧭",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 10),
-
-                ListTile(
-                  leading: const Icon(Icons.directions_walk),
-                  title: const Text("Walking"),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await NavigationService.openNavigation(
-                      destLat: place.lat,
-                      destLng: place.lng,
-                      type: TransportType.walk,
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.directions_transit),
-                  title: const Text("Public transport"),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await NavigationService.openNavigation(
-                      destLat: place.lat,
-                      destLng: place.lng,
-                      type: TransportType.transit,
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.directions_car),
-                  title: const Text("Car"),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await NavigationService.openNavigation(
-                      destLat: place.lat,
-                      destLng: place.lng,
-                      type: TransportType.car,
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 6),
-                const Text(
-                  "Times are estimates (MVP).",
-                  style: TextStyle(fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
 
   @override
   void dispose() {
@@ -129,6 +55,22 @@ class _PlanMapScreenState extends State<PlanMapScreen> {
     return "${km.toStringAsFixed(1)} km";
   }
 
+  void _openNavigate(Place place) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) => NavigationSheet(
+        place: place,
+        originLat: widget.originLat,
+        originLng: widget.originLng,
+        routes: widget.routes,
+      ),
+    );
+  }
+
   Set<Marker> _buildMarkers() {
     final out = <Marker>{};
 
@@ -137,7 +79,7 @@ class _PlanMapScreenState extends State<PlanMapScreen> {
       Marker(
         markerId: const MarkerId("origin"),
         position: LatLng(widget.originLat, widget.originLng),
-        infoWindow: const InfoWindow(title: "Origin"),
+        infoWindow: const InfoWindow(),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
       ),
     );
@@ -147,16 +89,15 @@ class _PlanMapScreenState extends State<PlanMapScreen> {
         Marker(
           markerId: MarkerId(p.id.isNotEmpty ? p.id : "${p.name}_${p.lat}_${p.lng}"),
           position: LatLng(p.lat, p.lng),
-          infoWindow: InfoWindow(
-            title: p.name,
-            snippet: _kmText(p),
-          ),
-          onTap: () {
-            setState(() => _selected = p);
-          },
+
+          // ✅ žádný tooltip nahoře (jen náš spodní panel)
+          infoWindow: const InfoWindow(),
+
+          onTap: () => setState(() => _selected = p),
         ),
       );
     }
+
     return out;
   }
 
@@ -186,21 +127,6 @@ class _PlanMapScreenState extends State<PlanMapScreen> {
     );
 
     await c.animateCamera(CameraUpdate.newLatLngBounds(bounds, 70));
-  }
-  void _openNavigate(Place place) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (_) => NavigationSheet(
-        place: place,
-        originLat: widget.originLat,
-        originLng: widget.originLng,
-        routes: widget.routes,
-      ),
-    );
   }
 
   @override
@@ -235,6 +161,7 @@ class _PlanMapScreenState extends State<PlanMapScreen> {
             onTap: (_) => setState(() => _selected = null),
           ),
 
+          // ✅ vlastní bottom panel po tapnutí na pin
           if (_selected != null)
             Align(
               alignment: Alignment.bottomCenter,
@@ -265,7 +192,8 @@ class _PlanMapScreenState extends State<PlanMapScreen> {
                         ),
                         const SizedBox(width: 10),
                         ElevatedButton(
-                          onPressed: () => _openRidePicker(_selected!),
+                          // ✅ stejné Navigate jako v Tips/Yours
+                          onPressed: () => _openNavigate(_selected!),
                           child: const Text("Navigate"),
                         ),
                       ],
