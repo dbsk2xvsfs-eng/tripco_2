@@ -70,11 +70,16 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       final exists = list.any((x) => x.id == p.id);
       if (!exists) list.add(p);
 
-      _selectedTab = "Yours";
       _hasUnsavedChanges = true;
     });
   }
 
+  void _removeFromYoursById(String id) {
+    setState(() {
+      _categoryPools["Yours"]?.removeWhere((p) => p.id == id);
+      _hasUnsavedChanges = true;
+    });
+  }
 
   void _addToAllFromCurrentTab(Place place) {
     // zachovej původní chování
@@ -1026,6 +1031,27 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     await PlanStorage.saveCurrentPlan(_allPlan);
   }
 
+  void _removeFromPoolById(String tab, String id) {
+    setState(() {
+      _categoryPools[tab]?.removeWhere((p) => p.id == id);
+      _hasUnsavedChanges = true;
+    });
+  }
+
+
+  void _addPlaceToPool(String tab, Place p) {
+    debugPrint("ADD TO POOL tab=$tab id=${p.id} name=${p.name}");
+    setState(() {
+      final list = _categoryPools.putIfAbsent(tab, () => <Place>[]);
+      final before = list.length;
+      if (!list.any((x) => x.id == p.id)) {
+        list.add(p);
+        _hasUnsavedChanges = true;
+      }
+      debugPrint("POOL $tab size: $before -> ${list.length}");
+    });
+  }
+
   Future<void> _toggleFavorite(Place place) async {
     final nowFav = await FavoritesStorage.toggleFavorite(place.id);
     await AnalyticsService.logFavorite(place.id, nowFav);
@@ -1334,6 +1360,29 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                 final place = list[i];
                 final isFav = FavoritesStorage.isFavorite(place.id);
 
+                final isUserTab = _selectedTab == "Yours" || _selectedTab == "Tips";
+                final isManual = place.websiteUrl == "__manual__";
+
+                if (isUserTab && isManual) {
+                  // ✅ jen Remove (pro místa z lupy)
+                  return PlaceCard(
+                    key: ValueKey(place.id),
+                    place: place,
+                    originLat: _pos!.latitude,
+                    originLng: _pos!.longitude,
+                    routes: _routes,
+                    accentColor: _colorForTab(_targetCategoryForPrimaryType(place.primaryType)),
+                    categoryMode: false,
+                    onAddToAll: null,
+                    onReplace: null,
+                    onToggleDone: null,
+                    onRemove: () => _removeFromPoolById(_selectedTab, place.id),
+                    isFavorite: isFav,
+                    onToggleFavorite: () => _toggleFavorite(place),
+                  );
+                }
+
+// ✅ ostatní (katalogové) beze změny:
                 return PlaceCard(
                   key: ValueKey(place.id),
                   place: place,
@@ -1360,12 +1409,19 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   }
 
   void _openPlaceSearch(BuildContext context) {
+    final target = (_selectedTab == "Tips" || _selectedTab == "Yours")
+        ? _selectedTab
+        : "Yours";
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => _PlaceSearchSheet(
-        onAddToYours: _addPlaceToYours,
+        onAddToYours: (place) {
+          _addPlaceToPool(target, place);
+          setState(() => _selectedTab = target); // ✅ ať to hned vidíš
+        },
       ),
     );
   }
@@ -1559,14 +1615,15 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                           lng: lng,
                           rating: rating,
                           googleMapsUri: googleMapsUri,
+
+                          websiteUrl: "__manual__", // ✅ značka "přidáno lupou"
                         );
 
-                        widget.onAddToYours(place);   // ✅ přidá do Yours (callback z DayPlanScreen)
-                        Navigator.pop(context);       // zavře sheet
+                        debugPrint("SEARCH PICKED -> calling onAddToYours: ${place.id} $name");
+                        widget.onAddToYours(place);
+                        debugPrint("SEARCH PICKED -> called, closing sheet");
+                        Navigator.pop(context);
 
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Added to Yours: $name')),
-                        );
                       } catch (e) {
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
