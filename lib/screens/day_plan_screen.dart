@@ -23,6 +23,10 @@ import '../widgets/place_card.dart';
 import '../widgets/replace_sheet.dart';
 import 'plan_map_screen.dart';
 
+import 'dart:async';
+
+
+
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
 
@@ -780,14 +784,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  "Uložené",
+                  "Saved",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
                 if (items.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(12),
-                    child: Text("Zatím nemáš uložený žádný plán."),
+                    child: Text("Empty storage."),
                   )
                 else
                   Flexible(
@@ -852,15 +856,15 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(_SaveChoice.cancel),
-              child: const Text("Zrušit"),
+              child: const Text("Cancel"),
             ),
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(_SaveChoice.no),
-              child: const Text("Ne"),
+              child: const Text("No"),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(_SaveChoice.yes),
-              child: const Text("Uložit"),
+              child: const Text("Safe"),
             ),
           ],
         );
@@ -1086,13 +1090,12 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
           ),
 
           IconButton(
-            icon: const Icon(Icons.ios_share),
-            tooltip: s.share,
-            onPressed: _shareAll,
+            icon: const Icon(Icons.search),
+            onPressed: () => _openPlaceSearch(context),
           ),
           IconButton(
             icon: const Icon(Icons.bookmark_outline),
-            tooltip: "Uložené",
+            tooltip: "Saved",
             onPressed: _openSavedPlansSheet,
           ),
           IconButton(
@@ -1326,7 +1329,217 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       ),
     );
   }
+
+  void _openPlaceSearch(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const _PlaceSearchSheet(),
+    );
+  }
+
 }
+
+class _PlaceSearchSheet extends StatefulWidget {
+  const _PlaceSearchSheet({super.key});
+
+  @override
+  State<_PlaceSearchSheet> createState() => _PlaceSearchSheetState();
+}
+
+class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
+
+  static const _placesKey = String.fromEnvironment('PLACES_REST_KEY');
+  static const _placesKeyFallback = String.fromEnvironment('GOOGLE_API_KEY');
+
+  String get _apiKey =>
+      _placesKey.isNotEmpty ? _placesKey : _placesKeyFallback;
+
+  final TextEditingController _controller = TextEditingController();
+  List<_PlaceSuggestion> _results = [];
+  Timer? _debounce;
+  bool _loading = false;
+  String? _error;
+
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    final q = value.trim();
+
+    if (q.isEmpty) {
+      setState(() {
+        _results = [];
+        _error = null;
+        _loading = false;
+      });
+      return;
+    }
+
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+
+      try {
+        final items = await _fetchAutocomplete(q);
+        if (!mounted) return;
+        setState(() {
+          _results = items;
+          _loading = false;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
+    });
+  }
+
+  Future<List<_PlaceSuggestion>> _fetchAutocomplete(String input) async {
+    final uri = Uri.parse('https://places.googleapis.com/v1/places:autocomplete');
+
+    final res = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': _apiKey,
+        'X-Goog-FieldMask':
+        'suggestions.placePrediction.placeId,suggestions.placePrediction.text',
+      },
+      body: jsonEncode({
+        'input': input,
+        'languageCode': 'cs',
+        'regionCode': 'CZ',
+      }),
+    );
+
+
+
+    if (res.statusCode != 200) {
+      throw Exception('Places autocomplete ${res.statusCode}: ${res.body}');
+    }
+
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final suggestions = (data['suggestions'] as List? ?? const []);
+
+    return suggestions
+        .map((s) => s['placePrediction'])
+        .where((p) => p != null)
+        .map<_PlaceSuggestion>((p) {
+      final text = (p['text']?['text'] as String?) ?? '';
+      final placeId = (p['placeId'] as String?) ?? '';
+      return _PlaceSuggestion(placeId: placeId, text: text);
+    })
+        .where((x) => x.placeId.isNotEmpty && x.text.isNotEmpty)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> _fetchPlaceDetail(String placeId) async {
+    final uri = Uri.parse('https://places.googleapis.com/v1/places/$placeId');
+
+    final res = await http.get(
+      uri,
+      headers: {
+        'X-Goog-Api-Key': _apiKey,
+        'X-Goog-FieldMask':
+        'id,displayName,location,types,rating,regularOpeningHours,googleMapsUri',
+      },
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception('Place detail ${res.statusCode}: ${res.body}');
+    }
+
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+
+    if (_apiKey.isEmpty) {
+      return const Center(child: Text("Missing PLACES_REST_KEY"));
+    }
+
+    return Padding(
+      padding: MediaQuery.of(context).viewInsets,
+      child: SizedBox(
+        height: 400,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                controller: _controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: "Search place...",
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: _onChanged,
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _results.length,
+                itemBuilder: (_, index) {
+                  return ListTile(
+                    title: Text(_results[index].text),
+                    onTap: () async {
+                      final picked = _results[index];
+
+                      try {
+                        final detail = await _fetchPlaceDetail(picked.placeId);
+
+                        if (!mounted) return;
+
+                        // Z detailu vytáhneme název + souřadnice
+                        final name = (detail['displayName']?['text'] as String?) ?? picked.text;
+                        final loc = detail['location'] as Map<String, dynamic>?;
+                        final lat = (loc?['latitude'] as num?)?.toDouble();
+                        final lng = (loc?['longitude'] as num?)?.toDouble();
+
+                        if (lat == null || lng == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Place has no location')),
+                          );
+                          return;
+                        }
+
+                        // Teď nabídneme kam přidat
+                        final result = await showDialog<_AddTarget>(
+                          context: context,
+                          builder: (_) => _AddToDialog(placeName: name),
+                        );
+
+                        if (result == null) return;
+
+                        // TADY zatím jen vypíšeme (další krok: reálně uložit)
+                        Navigator.pop(context); // zavře sheet
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Added "$name" to ${result.name}')),
+                        );
+
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString())),
+                        );
+                      }
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 enum _SaveChoice { yes, no, cancel }
 
@@ -1666,7 +1879,7 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                 children: [
                   const Expanded(
                     child: Text(
-                      "Změnit město",
+                      "Select a city",
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -1680,7 +1893,7 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
               TextField(
                 controller: _controller,
                 decoration: InputDecoration(
-                  hintText: "Začni psát město (např. Brno)",
+                  hintText: "Start writing",
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: IconButton(
                     onPressed: () {
@@ -1704,7 +1917,7 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                 child: TextButton.icon(
                   onPressed: () => Navigator.pop(context, const _PickedCity.useGps()),
                   icon: const Icon(Icons.my_location),
-                  label: const Text("Použít GPS"),
+                  label: const Text("Use GPS"),
                 ),
               ),
               const SizedBox(height: 4),
@@ -1731,14 +1944,14 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text("Zrušit"),
+                      child: const Text("Cancel"),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: _selected == null ? null : () => Navigator.pop(context, _selected),
-                      child: const Text("Použít"),
+                      child: const Text("Use"),
                     ),
                   ),
                 ],
@@ -1771,4 +1984,73 @@ double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
   return r * c;
 }
 
+class _PlaceSuggestion {
+  final String placeId;
+  final String text;
+  const _PlaceSuggestion({required this.placeId, required this.text});
+}
+
 double _degToRad(double d) => d * (pi / 180.0);
+
+
+
+
+
+
+
+enum _AddTarget { tips, yours, both }
+
+class _AddToDialog extends StatefulWidget {
+  final String placeName;
+  const _AddToDialog({required this.placeName});
+
+  @override
+  State<_AddToDialog> createState() => _AddToDialogState();
+}
+
+class _AddToDialogState extends State<_AddToDialog> {
+  bool tips = true;
+  bool yours = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Add place'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.placeName),
+          const SizedBox(height: 12),
+          CheckboxListTile(
+            value: tips,
+            onChanged: (v) => setState(() => tips = v ?? false),
+            title: const Text('Tips'),
+            controlAffinity: ListTileControlAffinity.leading,
+          ),
+          CheckboxListTile(
+            value: yours,
+            onChanged: (v) => setState(() => yours = v ?? false),
+            title: const Text('Yours'),
+            controlAffinity: ListTileControlAffinity.leading,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (!tips && !yours) return;
+            if (tips && yours) return Navigator.pop(context, _AddTarget.both);
+            if (tips) return Navigator.pop(context, _AddTarget.tips);
+            return Navigator.pop(context, _AddTarget.yours);
+          },
+          child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+}
