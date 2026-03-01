@@ -59,7 +59,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
 
   static const UserProfile _fixedProfile = UserProfile.solo;
-  static const _apiKey = String.fromEnvironment('GOOGLE_API_KEY');
+  static const _apiKey = String.fromEnvironment('PLACES_REST_KEY');
 
   // ------------------- Category config -------------------
 
@@ -1485,7 +1485,7 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
   List<_PickedCity> _items = [];
   _PickedCity? _selected;
 
-  static const _apiKey = String.fromEnvironment('GOOGLE_API_KEY');  // ✅ přidej
+
 
   int _callId = 0;
 

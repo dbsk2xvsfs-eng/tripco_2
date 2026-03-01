@@ -8,9 +8,9 @@
         android:icon="@mipmap/ic_launcher">
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyCZJnDieH6c9WoQVnjTk7iluHy2yh_DI78"/>
+            android:value="AIzaSyBjz1-IRcG6ia1maD0huHj2W0fhyi0CwGU"/>
         <activity
-            android:name=".MainActivity"
+            android:name="cz.tripco.app.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
