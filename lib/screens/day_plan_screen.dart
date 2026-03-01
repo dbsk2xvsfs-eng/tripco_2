@@ -76,6 +76,20 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   }
 
 
+  void _addToAllFromCurrentTab(Place place) {
+    // zachovej původní chování
+    _addToAllFromCategory(place); // tohle je tvoje existující metoda
+
+    // a navíc: když přidáváš z Yours, po přidání ho smaž z Yours poolu
+    if (_selectedTab == "Yours") {
+      setState(() {
+        _categoryPools["Yours"]?.removeWhere((p) => p.id == place.id);
+        _hasUnsavedChanges = true;
+      });
+    }
+  }
+
+
 
   static const UserProfile _fixedProfile = UserProfile.solo;
   static const _apiKey = String.fromEnvironment('PLACES_REST_KEY');
@@ -1330,7 +1344,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                   categoryMode: true,
                   onAddToAll: _allPlan.any((x) => x.id == place.id)
                       ? null
-                      : () => _addToAllFromCategory(place),
+                      : () => _addToAllFromCurrentTab(place),
                   isFavorite: isFav,
                   onToggleFavorite: () => _toggleFavorite(place),
                   onRemove: null,

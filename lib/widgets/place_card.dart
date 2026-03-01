@@ -228,7 +228,7 @@ class PlaceCard extends StatelessWidget {
                       minimumSize: const Size(0, 0),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text("Add to All"),
+                    child: const Text("Add to Yours"),
                   ),
               ],
             ),
