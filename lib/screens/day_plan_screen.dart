@@ -61,6 +61,21 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   bool _hasUnsavedChanges = false;
 
 
+  void _addPlaceToYours(Place p) {
+    setState(() {
+      // Pokud máš pro Yours vlastní klíč, uprav ho sem
+      final list = _categoryPools.putIfAbsent("Yours", () => <Place>[]);
+
+      // Nechceme duplicity
+      final exists = list.any((x) => x.id == p.id);
+      if (!exists) list.add(p);
+
+      _selectedTab = "Yours";
+      _hasUnsavedChanges = true;
+    });
+  }
+
+
 
   static const UserProfile _fixedProfile = UserProfile.solo;
   static const _apiKey = String.fromEnvironment('PLACES_REST_KEY');
@@ -1335,14 +1350,21 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => const _PlaceSearchSheet(),
+      builder: (_) => _PlaceSearchSheet(
+        onAddToYours: _addPlaceToYours,
+      ),
     );
   }
 
 }
 
 class _PlaceSearchSheet extends StatefulWidget {
-  const _PlaceSearchSheet({super.key});
+  final void Function(Place place) onAddToYours;
+
+  const _PlaceSearchSheet({
+    super.key,
+    required this.onAddToYours,
+  });
 
   @override
   State<_PlaceSearchSheet> createState() => _PlaceSearchSheetState();
@@ -1492,11 +1514,11 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
 
                       try {
                         final detail = await _fetchPlaceDetail(picked.placeId);
-
                         if (!mounted) return;
 
-                        // Z detailu vytáhneme název + souřadnice
-                        final name = (detail['displayName']?['text'] as String?) ?? picked.text;
+                        final name =
+                            (detail['displayName']?['text'] as String?) ?? picked.text;
+
                         final loc = detail['location'] as Map<String, dynamic>?;
                         final lat = (loc?['latitude'] as num?)?.toDouble();
                         final lng = (loc?['longitude'] as num?)?.toDouble();
@@ -1508,20 +1530,29 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                           return;
                         }
 
-                        // Teď nabídneme kam přidat
-                        final result = await showDialog<_AddTarget>(
-                          context: context,
-                          builder: (_) => _AddToDialog(placeName: name),
+                        final types = (detail['types'] as List?)?.cast<String>() ?? const <String>[];
+                        final placeType = types.isNotEmpty ? types.first : 'custom';
+
+                        final rating = (detail['rating'] as num?)?.toDouble();
+                        final googleMapsUri = detail['googleMapsUri'] as String?;
+
+                        final place = Place(
+                          id: picked.placeId,
+                          name: name,
+                          type: placeType,
+                          distanceMinutes: 0, // zatím neznáme, můžeš později dopočítat
+                          lat: lat,
+                          lng: lng,
+                          rating: rating,
+                          googleMapsUri: googleMapsUri,
                         );
 
-                        if (result == null) return;
+                        widget.onAddToYours(place);   // ✅ přidá do Yours (callback z DayPlanScreen)
+                        Navigator.pop(context);       // zavře sheet
 
-                        // TADY zatím jen vypíšeme (další krok: reálně uložit)
-                        Navigator.pop(context); // zavře sheet
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Added "$name" to ${result.name}')),
+                          SnackBar(content: Text('Added to Yours: $name')),
                         );
-
                       } catch (e) {
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
