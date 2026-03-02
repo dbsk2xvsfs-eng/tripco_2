@@ -1332,6 +1332,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
               itemBuilder: (context, i) {
                 final place = list[i];
                 final isFav = FavoritesStorage.isFavorite(place.id);
+                final isManual = place.isManual;
+
 
                 return PlaceCard(
                   key: ValueKey(place.id),
@@ -1342,7 +1344,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                   accentColor: _colorForTab(_targetCategoryForPrimaryType(place.primaryType)),
                   categoryMode: false,
                   onRemove: () => _removeFromAllById(place.id),
-                  onReplace: () => _openReplaceForAllItem(place),
+                  onReplace: isManual ? null : () => _openReplaceForAllItem(place),
                   onToggleDone: () => _toggleDoneInAllById(place.id),
                   isFavorite: isFav,
                   onToggleFavorite: () => _toggleFavorite(place),
@@ -1361,8 +1363,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                 final isFav = FavoritesStorage.isFavorite(place.id);
 
                 final isUserTab = _selectedTab == "Yours" || _selectedTab == "Tips";
-                final isManual = place.websiteUrl == "__manual__";
 
+                final isManual = place.isManual;
 
                 if (isUserTab && isManual) {
                   // ✅ jen Remove (pro místa z lupy)
@@ -1545,7 +1547,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
       headers: {
         'X-Goog-Api-Key': _apiKey,
         'X-Goog-FieldMask':
-        'id,displayName,location,types,rating,regularOpeningHours,googleMapsUri',
+        'id,displayName,location,types,rating,regularOpeningHours,googleMapsUri,websiteUri',
       },
     );
 
@@ -1594,6 +1596,8 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                         final detail = await _fetchPlaceDetail(picked.placeId);
                         if (!mounted) return;
 
+                        final websiteUrl = detail['websiteUri'] as String?;
+
                         final name =
                             (detail['displayName']?['text'] as String?) ?? picked.text;
 
@@ -1622,9 +1626,8 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                           lat: lat,
                           lng: lng,
                           rating: rating,
-                          googleMapsUri: googleMapsUri,
-
-                          websiteUrl: "__manual__", // ✅ značka "přidáno lupou"
+                          websiteUrl: websiteUrl,
+                          isManual: true, // ✅
                         );
 
                         debugPrint("SEARCH PICKED -> calling onAddToYours: ${place.id} $name");

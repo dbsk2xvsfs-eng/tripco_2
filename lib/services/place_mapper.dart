@@ -75,7 +75,7 @@ class PlaceMapper {
       userRatingsTotal: userRatingCount,
       openNow: openNow,
       websiteUrl: websiteUrl,
-      done: false,
+      isManual: true,
       googleMapsUri: googleMapsUri,
     );
   }

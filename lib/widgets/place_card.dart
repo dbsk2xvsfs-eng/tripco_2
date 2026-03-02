@@ -33,6 +33,7 @@ class PlaceCard extends StatelessWidget {
   /// If false => All mode (navigate/replace/remove/mark done)
   final bool categoryMode;
 
+
   const PlaceCard({
     super.key,
     required this.place,

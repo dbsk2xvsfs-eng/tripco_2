@@ -23,6 +23,7 @@ class Place {
   final String? googleMapsUri;
 
   final bool done;
+  final bool isManual;
 
   const Place({
     required this.id,
@@ -38,6 +39,7 @@ class Place {
     this.websiteUrl,
     this.done = false,
     this.googleMapsUri,
+    this.isManual = false,
   });
 
   Place copyWith({
@@ -54,6 +56,7 @@ class Place {
     String? websiteUrl,
     bool? done,
     String? googleMapsUri,
+    bool? isManual,
   }) {
     return Place(
       id: id ?? this.id,
@@ -69,6 +72,7 @@ class Place {
       websiteUrl: websiteUrl ?? this.websiteUrl,
       done: done ?? this.done,
       googleMapsUri: googleMapsUri ?? this.googleMapsUri,
+      isManual: isManual ?? this.isManual, // ✅ PŘIDAT
     );
   }
 
