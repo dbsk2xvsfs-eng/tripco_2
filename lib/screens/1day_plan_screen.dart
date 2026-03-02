@@ -1628,7 +1628,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                           lat: lat,
                           lng: lng,
                           rating: rating,
-                          googleMapsUri: googleMapsUri,
+                          websiteUrl: websiteUrl,
                           isManual: true, // ✅
                         );
 
