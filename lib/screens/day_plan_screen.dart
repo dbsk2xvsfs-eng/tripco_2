@@ -757,9 +757,13 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   Future<void> _saveCurrentPlanToSaved() async {
     if (_pos == null) return;
 
-    final city = await _resolveCityName();
+    final suggested = await _resolveCityName();
+
+    final name = await _askPlanName(context, suggested);
+    if (!mounted || name == null) return;
+
     await PlanStorage.upsertSavedPlan(
-      city: city,
+      city: name, // ✅ ručně zadaný název
       lat: _pos!.latitude,
       lng: _pos!.longitude,
       plan: List<Place>.from(_allPlan),
@@ -768,6 +772,76 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     if (!mounted) return;
     setState(() => _hasUnsavedChanges = false);
   }
+
+  Future<String?> _askPlanName(BuildContext context, String suggested) async {
+    final ctrl = TextEditingController(text: suggested);
+
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 14,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 12,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Save plan',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(ctx).pop(null),
+                    icon: const Icon(Icons.close),
+                    splashRadius: 20,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  hintText: 'Plan name',
+                  border: UnderlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (_) {
+                  final name = ctrl.text.trim();
+                  Navigator.of(ctx).pop(name.isEmpty ? null : name);
+                },
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    final name = ctrl.text.trim();
+                    Navigator.of(ctx).pop(name.isEmpty ? null : name);
+                  },
+                  child: const Text('Save'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+
+    return result;
+  }
+
 
   Future<void> _clearAllWithConfirm() async {
     final res = await showDialog<bool>(
@@ -898,27 +972,41 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(_SaveChoice.yes),
-              child: const Text("Safe"),
+              child: const Text("Save"),
             ),
           ],
         );
       },
     );
 
-    if (res == _SaveChoice.cancel || res == null) return false;
+    // Cancel / tap outside -> stop refresh
+    if (res == null || res == _SaveChoice.cancel) return false;
 
+    // ✅ No -> continue refresh
+    if (res == _SaveChoice.no) return true;
+
+    // Yes -> save then continue refresh
     if (res == _SaveChoice.yes) {
-      final city = await _resolveCityName();
+      if (_pos == null) return true; // nebo false, ale většinou ať refresh běží
+
+      final suggested = await _resolveCityName();
+      final name = await _askPlanName(context, suggested);
+      if (!mounted || name == null) return false; // tady když zavře pojmenování, beru jako cancel
+
       await PlanStorage.upsertSavedPlan(
-        city: city,
+        city: name,
         lat: _pos!.latitude,
         lng: _pos!.longitude,
         plan: List<Place>.from(_allPlan),
       );
+
+      if (mounted) setState(() => _hasUnsavedChanges = false);
+      return true;
     }
 
     return true;
   }
+
 
   // ------------------- Actions: All -------------------
 
@@ -1319,6 +1407,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
             ),
           ),
 
+
+
+
+
           const SizedBox(height: 6),
           Expanded(
             child: _selectedTab == "All"
@@ -1561,95 +1653,149 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
 
   @override
   Widget build(BuildContext context) {
-
     if (_apiKey.isEmpty) {
       return const Center(child: Text("Missing PLACES_REST_KEY"));
     }
 
-    return Padding(
-      padding: MediaQuery.of(context).viewInsets,
-      child: SizedBox(
-        height: 400,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: _controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: "Search place...",
-                  border: OutlineInputBorder(),
+    return SafeArea(
+      child: Padding(
+        padding: MediaQuery.of(context).viewInsets,
+        child: SizedBox(
+          height: 400, // nechávám stejně jako máš teď
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Column(
+              children: [
+                // ===== Header: Search place + X =====
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Search place',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                      splashRadius: 20,
+                      tooltip: 'Close',
+                    ),
+                  ],
                 ),
-                onChanged: _onChanged,
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _results.length,
-                itemBuilder: (_, index) {
-                  return ListTile(
-                    title: Text(_results[index].text),
-                    onTap: () async {
-                      final picked = _results[index];
+                const SizedBox(height: 10),
 
-                      try {
-                        final detail = await _fetchPlaceDetail(picked.placeId);
-                        final websiteUrl = detail['websiteUri'] as String?;
-                        if (!mounted) return;
-
-
-
-                        final name =
-                            (detail['displayName']?['text'] as String?) ?? picked.text;
-
-                        final loc = detail['location'] as Map<String, dynamic>?;
-                        final lat = (loc?['latitude'] as num?)?.toDouble();
-                        final lng = (loc?['longitude'] as num?)?.toDouble();
-
-                        if (lat == null || lng == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Place has no location')),
-                          );
-                          return;
-                        }
-
-                        final types = (detail['types'] as List?)?.cast<String>() ?? const <String>[];
-                        final placeType = types.isNotEmpty ? types.first : 'custom';
-
-                        final rating = (detail['rating'] as num?)?.toDouble();
-                        final googleMapsUri = detail['googleMapsUri'] as String?;
-
-                        final place = Place(
-                          id: picked.placeId,
-                          name: name,
-                          type: placeType,
-                          distanceMinutes: 0, // zatím neznáme, můžeš později dopočítat
-                          lat: lat,
-                          lng: lng,
-                          rating: rating,
-                          googleMapsUri: googleMapsUri,
-                          websiteUrl: websiteUrl,
-                          isManual: true, // ✅
+                // ===== Input: lupa + Start writing (nic víc) =====
+                TextField(
+                  controller: _controller,
+                  autofocus: true,
+                  onChanged: _onChanged,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: 'Start writing',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _controller,
+                      builder: (_, v, __) {
+                        if (v.text.isEmpty) return const SizedBox.shrink();
+                        return IconButton(
+                          onPressed: () {
+                            _controller.clear();
+                            _onChanged('');
+                          },
+                          icon: const Icon(Icons.close),
+                          splashRadius: 20,
+                          tooltip: 'Clear',
                         );
+                      },
+                    ),
+                    border: const UnderlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
 
-                        debugPrint("SEARCH PICKED -> calling onAddToYours: ${place.id} $name");
-                        widget.onAddToYours(place);
-                        debugPrint("SEARCH PICKED -> called, closing sheet");
-                        Navigator.pop(context);
+                const SizedBox(height: 6),
 
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.toString())),
-                        );
+                // ===== Seznam (stejně jako teď) =====
+                Expanded(
+                  child: Builder(
+                    builder: (_) {
+                      if (_loading) {
+                        return const Center(child: CircularProgressIndicator());
                       }
+                      if (_error != null) {
+                        return Center(child: Text(_error!));
+                      }
+
+                      return ListView.builder(
+                        itemCount: _results.length,
+                        itemBuilder: (_, index) {
+                          return ListTile(
+                            title: Text(_results[index].text),
+                            onTap: () async {
+                              final picked = _results[index];
+
+                              try {
+                                final detail = await _fetchPlaceDetail(picked.placeId);
+                                final websiteUrl = detail['websiteUri'] as String?;
+                                if (!mounted) return;
+
+                                final name =
+                                    (detail['displayName']?['text'] as String?) ??
+                                        picked.text;
+
+                                final loc = detail['location'] as Map<String, dynamic>?;
+                                final lat = (loc?['latitude'] as num?)?.toDouble();
+                                final lng = (loc?['longitude'] as num?)?.toDouble();
+
+                                if (lat == null || lng == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Place has no location')),
+                                  );
+                                  return;
+                                }
+
+                                final types = (detail['types'] as List?)?.cast<String>() ??
+                                    const <String>[];
+                                final placeType = types.isNotEmpty ? types.first : 'custom';
+
+                                final rating = (detail['rating'] as num?)?.toDouble();
+                                final googleMapsUri = detail['googleMapsUri'] as String?;
+
+                                final place = Place(
+                                  id: picked.placeId,
+                                  name: name,
+                                  type: placeType,
+                                  distanceMinutes: 0,
+                                  lat: lat,
+                                  lng: lng,
+                                  rating: rating,
+                                  googleMapsUri: googleMapsUri,
+                                  websiteUrl: websiteUrl,
+                                  isManual: true,
+                                );
+
+                                debugPrint(
+                                    "SEARCH PICKED -> calling onAddToYours: ${place.id} $name");
+                                widget.onAddToYours(place);
+                                debugPrint("SEARCH PICKED -> called, closing sheet");
+                                Navigator.pop(context);
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(e.toString())),
+                                );
+                              }
+                            },
+                          );
+                        },
+                      );
                     },
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
