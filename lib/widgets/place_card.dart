@@ -148,29 +148,6 @@ class PlaceCard extends StatelessWidget {
                     style: TextStyle(color: accentColor ?? Colors.black87),
                   ),
                 ),
-
-                if (place.openNow != null) ...[
-                  const SizedBox(width: 10),
-                  Text(place.openNow! ? s.open : s.closed),
-                ],
-
-                if (place.rating != null) ...[
-                  const SizedBox(width: 10),
-                  Text("⭐ ${place.rating!.toStringAsFixed(1)}"),
-                ],
-
-                const SizedBox(width: 6),
-
-                // ✅ HORNÍ WWW = Google Maps detail (foto, popis, recenze)
-                if ((place.googleMapsUri ?? "").trim().isNotEmpty)
-                  IconButton(
-                    onPressed: () => _openGoogleMapsPlace(context),
-                    icon: const Icon(Icons.public),
-                    tooltip: "Google Maps",
-                    visualDensity: VisualDensity.compact,
-                  )
-                else
-                  const SizedBox(width: 40),
               ],
             ),
 
@@ -185,7 +162,7 @@ class PlaceCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
 
-                // ✅ spodní WWW = Website (pokud existuje)
+                // Website
                 if (hasWebsite)
                   IconButton(
                     onPressed: () => _openWebsite(context),
@@ -194,11 +171,11 @@ class PlaceCard extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   )
                 else
-                  const SizedBox(width: 40), // drží stejné odsazení
+                  const SizedBox(width: 40),
 
                 const SizedBox(width: 6),
 
-                // ✅ Vzdálenost vždy
+                // Vzdálenost
                 Text(
                   _kmText(),
                   style: TextStyle(color: Colors.grey.shade800),
@@ -206,9 +183,35 @@ class PlaceCard extends StatelessWidget {
 
                 const Spacer(),
 
+                // 🔽 NOVĚ PŘESUNUTÉ Open
+                if (place.openNow != null) ...[
+                  Text(
+                    place.openNow! ? s.open : s.closed,
+                    style: TextStyle(
+                      color: place.openNow! ? Colors.green : Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
 
+                // 🔽 NOVĚ PŘESUNUTÉ Rating
+                if (place.rating != null) ...[
+                  Text("⭐ ${place.rating!.toStringAsFixed(1)}"),
+                  const SizedBox(width: 8),
+                ],
 
-                // ✅ CATEGORY: malé Add to All
+                // 🔽 NOVĚ PŘESUNUTÉ Google Maps
+                if ((place.googleMapsUri ?? "").trim().isNotEmpty)
+                  IconButton(
+                    onPressed: () => _openGoogleMapsPlace(context),
+                    icon: const Icon(Icons.public),
+                    tooltip: "Google Maps",
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+
+                // Add to Yours (zůstává)
                 if (categoryMode && onAddToAll != null)
                   TextButton(
                     onPressed: onAddToAll,
@@ -217,7 +220,7 @@ class PlaceCard extends StatelessWidget {
                       minimumSize: const Size(0, 0),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text("Add to Yours"),
+                    child: const Text("Add"),
                   ),
               ],
             ),

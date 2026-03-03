@@ -847,7 +847,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     final res = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Are you sure?"),
+        title: const Text("Are you sure clean your plan ?"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
