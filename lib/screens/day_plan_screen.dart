@@ -1196,25 +1196,127 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
   // ------------------- UI -------------------
 
+
+
+  Widget _buildTipsTopToggle(BuildContext context, Color tipsAccent, String tipsEmoji) {
+    return SizedBox(
+      width: 190,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.black12),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          children: [
+            Expanded(
+              child: ChoiceChip(
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _hasUnsavedChanges ? "Yours" : "Tips",
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600, // nebo bold
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Text(tipsEmoji, style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+                selected: _selectedTab == "All",
+                selectedColor: tipsAccent.withOpacity(0.18),
+                backgroundColor: Colors.transparent,
+                labelStyle: TextStyle(color: tipsAccent),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                onSelected: (_) {
+                  setState(() => _selectedTab = "All");
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_listCtrl.hasClients) {
+                      _listCtrl.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  });
+                },
+              ),
+            ),
+            Container(width: 1, height: 24, color: Colors.black12),
+            Expanded(
+              child: ChoiceChip(
+                label: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text("⭐", style: TextStyle(fontSize: 12)),
+                    SizedBox(width: 3),
+                    Text("Top", style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+                selected: _popFilter == _PopularityFilter.top,
+                selectedColor: Colors.amber.withOpacity(0.22),
+                backgroundColor: Colors.transparent,
+                labelStyle: const TextStyle(color: Colors.amber),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                onSelected: (v) async {
+                  setState(() {
+                    _popFilter = v ? _PopularityFilter.top : _PopularityFilter.all;
+                    _loading = true;
+                  });
+
+                  try {
+                    _categoryPools.clear();
+                    await _loadCategoryPools();
+
+                    if (!_hasUnsavedChanges) {
+                      _allPlan = _buildInitialAllFromPools();
+                      await PlanStorage.saveCurrentPlan(_allPlan);
+                    } else {
+                      _sortAllByDistance();
+                    }
+                  } catch (e) {
+                    if (mounted) setState(() => _error = e.toString());
+                  } finally {
+                    if (mounted) setState(() => _loading = false);
+                  }
+
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_listCtrl.hasClients) {
+                      _listCtrl.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     final tipsAccent = _hasUnsavedChanges ? _colorForTab("Attraction") : _colorForTab("Nature");
     final tipsEmoji = _hasUnsavedChanges ? "📍" : "📌";
 
-    if (_loading) {
-      return Scaffold(
-        appBar: AppBar(title: Text(s.dayPlan)),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
 
-    if (_error != null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(s.dayPlan)),
-        body: Center(child: Text(_error!)),
-      );
-    }
 
     final tabs = _tabs();
 
@@ -1223,8 +1325,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(s.dayPlan),
-        centerTitle: true,
+        centerTitle: false, // 🔥 důležité
+        title: _buildTipsTopToggle(context, tipsAccent, tipsEmoji),
         actions: [
           IconButton(
             icon: const Icon(Icons.map_outlined),
@@ -1266,97 +1368,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
               child: Row(
                 children: [
 
-                  // ---------------- ALL (Tips / Yours) ----------------
-                  ChoiceChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_hasUnsavedChanges ? "Yours" : "Tips"),
-                        const SizedBox(width: 6),
-                        Text(tipsEmoji),
-                      ],
-                    ),
-                    selected: _selectedTab == "All",
-                    selectedColor: tipsAccent.withOpacity(0.18),
-                    backgroundColor: tipsAccent.withOpacity(0.10),
-                    labelStyle: TextStyle(color: tipsAccent),
-                    onSelected: (_) {
-                      setState(() => _selectedTab = "All");
 
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_listCtrl.hasClients) {
-                          _listCtrl.animateTo(
-                            0,
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeOut,
-                          );
-                        }
-                      });
-                    },
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  // ---------------- ⭐ TOP FILTER ----------------
-
-                  ChoiceChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Text("⭐"),
-                        SizedBox(width: 6),
-                        Text("Top"),
-                      ],
-                    ),
-                    selected: _popFilter == _PopularityFilter.top,
-                    selectedColor: Colors.amber.withOpacity(0.22),
-                    backgroundColor: Colors.amber.withOpacity(0.10),
-                    labelStyle: const TextStyle(color: Colors.amber),
-                    onSelected: (v) async {
-                      // 1) přepnout filtr
-                      setState(() {
-                        _popFilter = v ? _PopularityFilter.top : _PopularityFilter.all;
-                        _loading = true; // optional: můžeš klidně vyhodit, pokud nechceš "loading"
-                      });
-
-                      try {
-                        // 2) přenačíst katalogy podle filtru (DISTANCE vs POPULARITY)
-                        _categoryPools.clear();
-                        await _loadCategoryPools();
-
-                        // 3) když jsme v Tips/Yours (All), přestavět "Tips" (když nejsou user změny)
-                        //    - pokud máš uživatelský plán (hasUnsavedChanges), nech ho být
-                        if (!_hasUnsavedChanges) {
-                          _allPlan = _buildInitialAllFromPools();
-                          await PlanStorage.saveCurrentPlan(_allPlan);
-                        } else {
-                          // jen přeuspořádej aktuální All (ať se to chová konzistentně)
-                          _sortAllByDistance();
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          setState(() => _error = e.toString());
-                        }
-                      } finally {
-                        if (mounted) {
-                          setState(() => _loading = false);
-                        }
-                      }
-
-                      // 4) scroll nahoru
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_listCtrl.hasClients) {
-                          _listCtrl.animateTo(
-                            0,
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeOut,
-                          );
-                        }
-                      });
-                    },
-                  ),
-
-                  const SizedBox(width: 8),
 
                   // ---------------- CATEGORY TABS ----------------
                   Expanded(
