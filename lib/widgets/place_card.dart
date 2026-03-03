@@ -206,19 +206,7 @@ class PlaceCard extends StatelessWidget {
 
                 const Spacer(),
 
-                // ✅ ALL: Mark done
-                if (!categoryMode)
-                  GestureDetector(
-                    onTap: () => onToggleDone?.call(),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.black12),
-                      ),
-                      child: Text(place.done ? s.done : s.markDone),
-                    ),
-                  ),
+
 
                 // ✅ CATEGORY: malé Add to All
                 if (categoryMode && onAddToAll != null)
@@ -240,43 +228,63 @@ class PlaceCard extends StatelessWidget {
             if (!categoryMode) ...[
               Row(
                 children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: place.done
-                          ? null
-                          : () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-                          ),
-                          builder: (_) => NavigationSheet(
-                            place: place,
-                            originLat: originLat,
-                            originLng: originLng,
-                            routes: routes,
-                          ),
-                        );
-                      },
-                      child: Text(s.navigate),
+                  // Navigate (kratší, ne full width)
+                  ElevatedButton(
+                    onPressed: place.done
+                        ? null
+                        : () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+                        ),
+                        builder: (_) => NavigationSheet(
+                          place: place,
+                          originLat: originLat,
+                          originLng: originLng,
+                          routes: routes,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      minimumSize: const Size(0, 40),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
+                    child: Text(s.navigate),
                   ),
+
                   const SizedBox(width: 10),
+
+                  // Mark done (hned napravo od Navigate, před Replace)
+                  if (onToggleDone != null)
+                    OutlinedButton(
+                      onPressed: onToggleDone,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        minimumSize: const Size(0, 40),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text("Mark done"), // pokud nemáš v lokalizaci, dej "Mark done"
+                    ),
+
+                  const Spacer(),
 
                   if (onReplace != null)
                     IconButton(
-                      onPressed: onReplace, // null => disabled
+                      onPressed: onReplace,
                       icon: const Icon(Icons.shuffle),
                       tooltip: "Replace",
                     ),
+
                   IconButton(
-                    onPressed: onRemove, // null => disabled
+                    onPressed: onRemove,
                     icon: const Icon(Icons.close),
                     tooltip: "Remove",
                   ),
                 ],
-              ),
+              )
             ],
           ],
         ),
