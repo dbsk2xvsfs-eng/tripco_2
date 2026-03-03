@@ -1199,82 +1199,38 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
 
   Widget _buildTipsTopToggle(BuildContext context, Color tipsAccent, String tipsEmoji) {
-    return SizedBox(
-      width: 190,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.black12),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            Expanded(
-              child: ChoiceChip(
-                label: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _hasUnsavedChanges ? "Yours" : "Tips",
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600, // nebo bold
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    Text(tipsEmoji, style: const TextStyle(fontSize: 12)),
-                  ],
-                ),
-                selected: _selectedTab == "All",
-                selectedColor: tipsAccent.withOpacity(0.18),
-                backgroundColor: Colors.transparent,
-                labelStyle: TextStyle(color: tipsAccent),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                onSelected: (_) {
-                  setState(() => _selectedTab = "All");
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_listCtrl.hasClients) {
-                      _listCtrl.animateTo(
-                        0,
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOut,
-                      );
-                    }
-                  });
-                },
-              ),
-            ),
-            Container(width: 1, height: 24, color: Colors.black12),
-            Expanded(
-              child: ChoiceChip(
-                label: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text("⭐", style: TextStyle(fontSize: 12)),
-                    SizedBox(width: 3),
-                    Text("Top", style: TextStyle(fontSize: 12)),
-                  ],
-                ),
-                selected: _popFilter == _PopularityFilter.top,
-                selectedColor: Colors.amber.withOpacity(0.22),
-                backgroundColor: Colors.transparent,
-                labelStyle: const TextStyle(color: Colors.amber),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                onSelected: (v) async {
-                  setState(() {
-                    _popFilter = v ? _PopularityFilter.top : _PopularityFilter.all;
-                    _loading = true;
-                  });
+    final isTop = _popFilter == _PopularityFilter.top;
+    final leftLabel = _hasUnsavedChanges ? "Yours" : "Tips";
+    final leftPinIsDiagonal = !_hasUnsavedChanges; // Tips = šikmo, Yours = svisle
 
+    final greenBg = tipsAccent.withOpacity(0.22); // stejné jako Tips highlight
+    final whiteBg = Colors.white;
+
+    return Container(
+      width: 300, // uprav dle potřeby (podle screenshotu OK 200–240)
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black12, width: 0.8),
+        color: Colors.transparent,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        children: [
+          // LEFT segment (Tips/Yours)
+          Expanded(
+            child: InkWell(
+              onTap: () async {
+                // klik na Tips/Yours vypne Top
+                final wasTop = isTop;
+
+                setState(() {
+                  if (wasTop) _popFilter = _PopularityFilter.all;
+                  _selectedTab = "All";
+                  if (wasTop) _loading = true;
+                });
+
+                // ✅ DŮLEŽITÉ: když jsme byli v Top, musíme znovu načíst "nearby" pooly
+                if (wasTop) {
                   try {
                     _categoryPools.clear();
                     await _loadCategoryPools();
@@ -1290,21 +1246,117 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                   } finally {
                     if (mounted) setState(() => _loading = false);
                   }
+                }
 
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_listCtrl.hasClients) {
-                      _listCtrl.animateTo(
-                        0,
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOut,
-                      );
-                    }
-                  });
-                },
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_listCtrl.hasClients) {
+                    _listCtrl.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOut,
+                    );
+                  }
+                });
+              },
+              child: Container(
+                height: 34,
+                color: isTop ? whiteBg : greenBg,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (!isTop) ...[
+                      const Icon(Icons.check, size: 16),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      leftLabel,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(width: 6),
+                    // pin: šikmo pro Tips, svisle pro Yours
+                    Transform.rotate(
+                      angle: leftPinIsDiagonal ? -0.6 : 0.0,
+                      child: const Icon(Icons.push_pin, size: 16, color: Colors.red),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+
+          Container(width: 1.5, height: 28, color: Colors.black26),
+
+          // RIGHT segment (Top)
+          Expanded(
+            child: InkWell(
+              onTap: () async {
+                // klik na Top aktivuje Top, levá strana zbělá
+                final v = !isTop;
+
+                setState(() {
+                  _popFilter = v ? _PopularityFilter.top : _PopularityFilter.all;
+                  _loading = true;
+                });
+
+                try {
+                  _categoryPools.clear();
+                  await _loadCategoryPools();
+
+                  // ✅ Top má vždy ukázat TOP pooly, bez ohledu na Yours/Tips
+                  if (_popFilter == _PopularityFilter.top) {
+                    _allPlan = _buildInitialAllFromPools();
+                    // NEukládej jako current plan, ať nepřepíšeš uživatelův plán
+                    // await PlanStorage.saveCurrentPlan(_allPlan);  // ❌
+                  } else {
+                    // Tips režim: pokud nejsou user změny, přestav a ulož
+                    if (!_hasUnsavedChanges) {
+                      _allPlan = _buildInitialAllFromPools();
+                      await PlanStorage.saveCurrentPlan(_allPlan);
+                    } else {
+                      _sortAllByDistance();
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) setState(() => _error = e.toString());
+                } finally {
+                  if (mounted) setState(() => _loading = false);
+                }
+
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_listCtrl.hasClients) {
+                    _listCtrl.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOut,
+                    );
+                  }
+                });
+              },
+              child: Container(
+                height: 36,
+                color: isTop ? greenBg : whiteBg,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (isTop) ...[
+                      const Icon(Icons.check, size: 16),
+                      const SizedBox(width: 6),
+                    ],
+                    const Text("⭐", style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 6),
+                    const Text(
+                      "Top",
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
