@@ -1271,31 +1271,39 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
 
   Widget _buildTripcoLogo() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const Text(
-          "eTripco",
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0,
-          ),
-        ),
-        Positioned(
-          left: 8, // posun nad "i"
-          top: 6,
-          child: Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: Color(0xFFFF7A00),
-              borderRadius: BorderRadius.circular(2),
+    return SizedBox(
+      width: 92,
+      height: 30,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Positioned(
+            left: 0,
+            bottom: 0,
+            child: Text(
+              "eTripco",
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0,
+                color: Color(0xFF1F1F1F),
+              ),
             ),
           ),
-        ),
-      ],
+          Positioned(
+            left: 44, // doladí tečku nad i
+            top: -3,
+            child: Container(
+              width: 6,
+              height: 8,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF7A00),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1487,21 +1495,33 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
           IconButton(
             icon: const Icon(Icons.map_outlined),
             tooltip: "Map",
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            visualDensity: VisualDensity.compact,
             onPressed: _openPlanMap,
           ),
 
           IconButton(
             icon: const Icon(Icons.search),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            visualDensity: VisualDensity.compact,
             onPressed: () => _openPlaceSearch(context),
           ),
           IconButton(
             icon: const Icon(Icons.bookmark_outline),
             tooltip: "Saved",
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            visualDensity: VisualDensity.compact,
             onPressed: _openSavedPlansSheet,
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: s.refresh,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            visualDensity: VisualDensity.compact,
             onPressed: _popFilter == _PopularityFilter.top
                 ? null
                 : _refreshEverything,
