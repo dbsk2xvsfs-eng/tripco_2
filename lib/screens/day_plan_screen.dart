@@ -1292,7 +1292,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       ),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
-      labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 6),
 
       label: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1439,8 +1439,32 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
     return Scaffold(
       appBar: AppBar(
-        centerTitle: false, // 🔥 důležité
-        title: _buildTipsYoursToggle(tipsAccent),
+        automaticallyImplyLeading: false,
+        centerTitle: false,
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 12),   // ← sem
+              child: _buildTipsYoursToggle(tipsAccent),
+            ),
+
+            const SizedBox(width: 10),
+
+            const Flexible(
+              child: Text(
+                "Tripco",
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+
         actions: [
           IconButton(
             icon: const Icon(Icons.map_outlined),

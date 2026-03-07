@@ -115,6 +115,9 @@ class Place {
       websiteUrl: m["websiteUrl"]?.toString(),
       done: m["done"] as bool? ?? false,
       googleMapsUri: (m["googleMapsUri"] ?? "").toString().isEmpty ? null : (m["googleMapsUri"]).toString(),
+      photos: ((m["photos"] as List?) ?? const [])
+          .map((x) => PlacePhoto.fromMap(x as Map<dynamic, dynamic>))
+          .toList(),
     );
   }
 }
