@@ -1269,6 +1269,36 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     await _refreshEverything();
   }
 
+
+  Widget _buildTripcoLogo() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Text(
+          "eTripco",
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+        ),
+        Positioned(
+          left: 8, // posun nad "i"
+          top: 6,
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: Color(0xFFFF7A00),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   // ------------------- UI -------------------
 
 
@@ -1445,23 +1475,11 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
         title: Row(
           children: [
             Padding(
-              padding: const EdgeInsets.only(left: 12),   // ← sem
+              padding: const EdgeInsets.only(left: 12),
               child: _buildTipsYoursToggle(tipsAccent),
             ),
-
-            const SizedBox(width: 10),
-
-            const Flexible(
-              child: Text(
-                "Tripco",
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
+            const SizedBox(width: 12),
+            _buildTripcoLogo(),
           ],
         ),
 
