@@ -1278,78 +1278,79 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     final leftLabel = _hasUnsavedChanges ? "Yours" : "Tips";
     final leftPinIsDiagonal = !_hasUnsavedChanges;
 
-    return Container(
-      height: 40,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: Colors.black12,
-          width: 1,
-        ),
-        color: isTop ? Colors.white : tipsAccent.withOpacity(0.18),
+    return ChoiceChip(
+      showCheckmark: false,
+      selected: !isTop,
+      selectedColor: Colors.amber.withOpacity(0.22), // stejná barva jako Top
+      backgroundColor: Colors.white,
+      side: BorderSide(
+        color: !isTop ? Colors.amber.shade700 : Colors.black12,
+        width: 1,
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            setState(() {
-              _popFilter = _PopularityFilter.all;
-              _selectedTab = "All";
-            });
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 14),
 
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_listCtrl.hasClients) {
-                _listCtrl.animateTo(
-                  0,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                );
-              }
-            });
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!isTop) ...[
-                  Container(
-                    width: 22,
-                    height: 22,
-                    decoration: const BoxDecoration(
-                      color: Colors.black87,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check,
-                      size: 15,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                Text(
-                  leftLabel,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Transform.rotate(
-                  angle: leftPinIsDiagonal ? -0.6 : 0.0,
-                  child: const Icon(
-                    Icons.push_pin,
-                    size: 16,
-                    color: Colors.red,
-                  ),
-                ),
-              ],
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!isTop) ...[
+            Container(
+              width: 22,
+              height: 22,
+              decoration: const BoxDecoration(
+                color: Colors.black87,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check,
+                size: 15,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+
+          Text(
+            leftLabel,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
             ),
           ),
-        ),
+
+          const SizedBox(width: 8),
+
+          Transform.rotate(
+            angle: leftPinIsDiagonal ? -0.6 : 0.0,
+            child: const Icon(
+              Icons.push_pin,
+              size: 16,
+              color: Colors.red,
+            ),
+          ),
+        ],
       ),
+
+      onSelected: (_) {
+        setState(() {
+          _popFilter = _PopularityFilter.all;
+          _selectedTab = "All";
+        });
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_listCtrl.hasClients) {
+            _listCtrl.animateTo(
+              0,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      },
     );
   }
 
@@ -1564,6 +1565,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                     return PlaceCard(
                       key: ValueKey(place.id),
                       place: place,
+                      apiKey: _apiKey,
                       originLat: _pos!.latitude,
                       originLng: _pos!.longitude,
                       routes: _routes,
@@ -1599,6 +1601,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                         return PlaceCard(
                           key: ValueKey(place.id),
                           place: place,
+                          apiKey: _apiKey,
                           originLat: _pos!.latitude,
                           originLng: _pos!.longitude,
                           routes: _routes,
@@ -1637,6 +1640,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                   return PlaceCard(
                     key: ValueKey(place.id),
                     place: place,
+                    apiKey: _apiKey,
                     originLat: _pos!.latitude,
                     originLng: _pos!.longitude,
                     routes: _routes,
@@ -1655,6 +1659,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                 return PlaceCard(
                   key: ValueKey(place.id),
                   place: place,
+                  apiKey: _apiKey,
                   originLat: _pos!.latitude,
                   originLng: _pos!.longitude,
                   routes: _routes,

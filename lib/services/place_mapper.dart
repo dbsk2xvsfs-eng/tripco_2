@@ -63,6 +63,24 @@ class PlaceMapper {
     final websiteUrl = p["websiteUri"]?.toString();
     final googleMapsUri = p["googleMapsUri"]?.toString();
 
+    final photosRaw = (p["photos"] as List?) ?? const [];
+
+    final photos = photosRaw.map<PlacePhoto>((x) {
+      final m = x as Map<String, dynamic>;
+
+      String? author;
+      final attributions = (m["authorAttributions"] as List?) ?? const [];
+      if (attributions.isNotEmpty) {
+        final first = attributions.first as Map<String, dynamic>;
+        author = first["displayName"]?.toString();
+      }
+
+      return PlacePhoto(
+        name: (m["name"] ?? "").toString(),
+        authorAttribution: author,
+      );
+    }).where((x) => x.name.isNotEmpty).toList();
+
     return Place(
       id: id,
       name: displayName,
@@ -77,6 +95,7 @@ class PlaceMapper {
       websiteUrl: websiteUrl,
       isManual: false,
       googleMapsUri: googleMapsUri,
+      photos: photos,
     );
   }
 }

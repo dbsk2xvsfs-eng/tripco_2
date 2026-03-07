@@ -33,6 +33,8 @@ class PlaceCard extends StatelessWidget {
   /// If false => All mode (navigate/replace/remove/mark done)
   final bool categoryMode;
 
+  final String apiKey;
+
 
   const PlaceCard({
     super.key,
@@ -42,6 +44,7 @@ class PlaceCard extends StatelessWidget {
     required this.routes,
     required this.isFavorite,
     required this.onToggleFavorite,
+    required this.apiKey,
     this.onRemove,
     this.onReplace,
     this.onToggleDone,
@@ -111,6 +114,102 @@ class PlaceCard extends StatelessWidget {
     return "${km.toStringAsFixed(1)} km";
   }
 
+
+  String _photoUrl(String photoName, {int maxWidth = 300}) {
+    return "https://places.googleapis.com/v1/$photoName/media?maxWidthPx=$maxWidth&key=$apiKey";
+  }
+
+  void _openPhotoGallery(BuildContext context) {
+    if (place.photos.isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: SizedBox(
+          height: 420,
+          child: PageView.builder(
+            itemCount: place.photos.length,
+            itemBuilder: (context, index) {
+              final photo = place.photos[index];
+              return Column(
+                children: [
+                  Expanded(
+                    child: InteractiveViewer(
+                      child: Image.network(
+                        _photoUrl(photo.name, maxWidth: 1200),
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) =>
+                        const Center(child: Icon(Icons.broken_image, size: 48)),
+                      ),
+                    ),
+                  ),
+                  if ((photo.authorAttribution ?? "").trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        photo.authorAttribution!,
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildPhotoStack(BuildContext context) {
+    if (place.photos.isEmpty) return const SizedBox.shrink();
+
+    final visible = place.photos.take(3).toList();
+
+    return GestureDetector(
+      onTap: () => _openPhotoGallery(context),
+      child: SizedBox(
+        width: 74,
+        height: 54,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (int i = visible.length - 1; i >= 0; i--)
+              Positioned(
+                top: i * 4,
+                right: i * 40,
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.network(
+                    _photoUrl(visible[i].name, maxWidth: 200),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: Colors.grey.shade200,
+                      child: const Icon(Icons.image, size: 20),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
@@ -128,14 +227,23 @@ class PlaceCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // title
-            Text(
-              place.name,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                decoration: place.done ? TextDecoration.lineThrough : null,
-                color: place.done ? Colors.grey : null,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    place.name,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      decoration: place.done ? TextDecoration.lineThrough : null,
+                      color: place.done ? Colors.grey : null,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _buildPhotoStack(context),
+              ],
             ),
             const SizedBox(height: 6),
 

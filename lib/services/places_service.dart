@@ -55,6 +55,7 @@ class PlacesService {
         "places.websiteUri",
         "places.googleMapsUri",
         "places.primaryTypeDisplayName",
+        "places.photos",
       ].join(","),
     };
 

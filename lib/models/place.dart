@@ -25,6 +25,8 @@ class Place {
   final bool done;
   final bool isManual;
 
+  final List<PlacePhoto> photos;
+
   const Place({
     required this.id,
     required this.name,
@@ -40,6 +42,7 @@ class Place {
     this.done = false,
     this.googleMapsUri,
     this.isManual = false,
+    this.photos = const [],
   });
 
   Place copyWith({
@@ -57,6 +60,7 @@ class Place {
     bool? done,
     String? googleMapsUri,
     bool? isManual,
+    List<PlacePhoto>? photos,
   }) {
     return Place(
       id: id ?? this.id,
@@ -73,6 +77,7 @@ class Place {
       done: done ?? this.done,
       googleMapsUri: googleMapsUri ?? this.googleMapsUri,
       isManual: isManual ?? this.isManual, // ✅ PŘIDAT
+      photos: photos ?? this.photos,
     );
   }
 
@@ -91,6 +96,7 @@ class Place {
       "websiteUrl": websiteUrl,
       "done": done,
       "googleMapsUri": googleMapsUri,
+      "photos": photos.map((p) => p.toMap()).toList(),
     };
   }
 
@@ -109,6 +115,30 @@ class Place {
       websiteUrl: m["websiteUrl"]?.toString(),
       done: m["done"] as bool? ?? false,
       googleMapsUri: (m["googleMapsUri"] ?? "").toString().isEmpty ? null : (m["googleMapsUri"]).toString(),
+    );
+  }
+}
+
+class PlacePhoto {
+  final String name; // Google photo resource name
+  final String? authorAttribution;
+
+  const PlacePhoto({
+    required this.name,
+    this.authorAttribution,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'authorAttribution': authorAttribution,
+    };
+  }
+
+  static PlacePhoto fromMap(Map<dynamic, dynamic> m) {
+    return PlacePhoto(
+      name: (m['name'] ?? '').toString(),
+      authorAttribution: m['authorAttribution']?.toString(),
     );
   }
 }
