@@ -1271,39 +1271,57 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
 
   Widget _buildTripcoLogo() {
-    return SizedBox(
-      width: 92,
-      height: 30,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const Positioned(
-            left: 0,
-            bottom: 0,
-            child: Text(
-              "eTripco",
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0,
-                color: Color(0xFF1F1F1F),
+    const textStyle = TextStyle(
+      fontSize: 26,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 0,
+      color: Color(0xFF1F1F1F),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: const TextSpan(text: "eTripco", style: textStyle),
+          textDirection: TextDirection.ltr,
+          maxLines: 1,
+        )..layout();
+
+        final textWidth = painter.width;
+        final textHeight = painter.height;
+
+        // pozice tečky relativně podle šířky textu
+        final dotLeft = textWidth * 0.44;
+        final dotTop = textHeight * 0.02;
+
+        return SizedBox(
+          width: textWidth,
+          height: textHeight + 2,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Text(
+                "eTripco",
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.visible,
+                style: textStyle,
               ),
-            ),
-          ),
-          Positioned(
-            left: 44, // doladí tečku nad i
-            top: -3,
-            child: Container(
-              width: 6,
-              height: 8,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF7A00),
-                borderRadius: BorderRadius.circular(2),
+              Positioned(
+                left: dotLeft,
+                top: dotTop,
+                child: Container(
+                  width: 6,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF7A00),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1486,8 +1504,17 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
               padding: const EdgeInsets.only(left: 12),
               child: _buildTipsYoursToggle(tipsAccent),
             ),
-            const SizedBox(width: 12),
-            _buildTripcoLogo(),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: _buildTripcoLogo(),
+                ),
+              ),
+            ),
           ],
         ),
 

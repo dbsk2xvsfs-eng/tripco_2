@@ -35,7 +35,6 @@ class PlaceCard extends StatelessWidget {
 
   final String apiKey;
 
-
   const PlaceCard({
     super.key,
     required this.place,
@@ -57,19 +56,21 @@ class PlaceCard extends StatelessWidget {
     final u = raw.trim();
     if (u.isEmpty) return null;
 
-    // doplníme schéma, pokud chybí (muzeumdobris.cz -> https://muzeumdobris.cz)
-    final fixed = (u.startsWith('http://') || u.startsWith('https://')) ? u : 'https://$u';
+    final fixed =
+    (u.startsWith('http://') || u.startsWith('https://')) ? u : 'https://$u';
 
     final uri = Uri.tryParse(fixed);
     if (uri == null) return null;
-
-    // minimální validace
     if (uri.host.isEmpty) return null;
 
     return uri;
   }
 
-  Future<void> _launchExternal(BuildContext context, String rawUrl, String failText) async {
+  Future<void> _launchExternal(
+      BuildContext context,
+      String rawUrl,
+      String failText,
+      ) async {
     final uri = _toSafeUri(rawUrl);
     if (uri == null) return;
 
@@ -110,10 +111,10 @@ class PlaceCard extends StatelessWidget {
   double _degToRad(double d) => d * (pi / 180.0);
 
   String _kmText() {
-    final km = _haversineMeters(originLat, originLng, place.lat, place.lng) / 1000.0;
+    final km =
+        _haversineMeters(originLat, originLng, place.lat, place.lng) / 1000.0;
     return "${km.toStringAsFixed(1)} km";
   }
-
 
   String _photoUrl(String photoName, {int maxWidth = 300}) {
     return "https://places.googleapis.com/v1/$photoName/media?maxWidthPx=$maxWidth&key=$apiKey";
@@ -149,7 +150,8 @@ class PlaceCard extends StatelessWidget {
                       padding: const EdgeInsets.all(12),
                       child: Text(
                         photo.authorAttribution!,
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style:
+                        const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ),
                 ],
@@ -161,27 +163,47 @@ class PlaceCard extends StatelessWidget {
     );
   }
 
+  Widget _tinyIconButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String tooltip,
+  }) {
+    return IconButton(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20),
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      splashRadius: 18,
+    );
+  }
 
   Widget _buildPhotoStack(BuildContext context) {
     if (place.photos.isEmpty) return const SizedBox.shrink();
 
     final visible = place.photos.take(3).toList();
+    const thumbSize = 60.0;
+    const overlap = 20.0;
+
+    final stackWidth = thumbSize + ((visible.length - 1) * overlap);
+    const stackHeight = 68.0;
 
     return GestureDetector(
       onTap: () => _openPhotoGallery(context),
       child: SizedBox(
-        width: 74,
-        height: 54,
+        width: stackWidth,
+        height: stackHeight,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            for (int i = visible.length - 1; i >= 0; i--)
+            for (int i = 0; i < visible.length; i++)
               Positioned(
-                top: i * 4,
-                right: i * 40,
+                left: i * overlap,
+                top: i * 2,
                 child: Container(
-                  width: 60,
-                  height: 60,
+                  width: thumbSize,
+                  height: thumbSize,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: Colors.white, width: 2),
@@ -216,6 +238,7 @@ class PlaceCard extends StatelessWidget {
 
     final website = (place.websiteUrl ?? "").trim();
     final hasWebsite = website.isNotEmpty;
+    final hasGoogleMaps = (place.googleMapsUri ?? "").trim().isNotEmpty;
 
     return Card(
       color: (accentColor ?? Colors.white).withOpacity(0.1),
@@ -226,100 +249,89 @@ class PlaceCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // title
+            // title + photos
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
-                    place.name,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      decoration: place.done ? TextDecoration.lineThrough : null,
-                      color: place.done ? Colors.grey : null,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text(
+                      place.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        decoration:
+                        place.done ? TextDecoration.lineThrough : null,
+                        color: place.done ? Colors.grey : null,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                _buildPhotoStack(context),
+                if (place.photos.isNotEmpty) _buildPhotoStack(context),
               ],
             ),
+
             const SizedBox(height: 6),
 
-            // type / open / rating
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    place.type,
-                    style: TextStyle(color: accentColor ?? Colors.black87),
-                  ),
-                ),
-              ],
+            // type
+            Text(
+              place.type,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: accentColor ?? Colors.black87),
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
 
-            // Entry + WWW + km + (Category) Add / (All) Mark done
+            // info row - responsive
             Row(
               children: [
-                Text(
-                  "${s.entry}:",
-                  style: TextStyle(color: Colors.grey.shade800),
-                ),
-                const SizedBox(width: 8),
 
-                // Website
-                if (hasWebsite)
-                  IconButton(
-                    onPressed: () => _openWebsite(context),
-                    icon: const Icon(Icons.public),
-                    tooltip: "Website",
-                    visualDensity: VisualDensity.compact,
-                  )
-                else
-                  const SizedBox(width: 40),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
 
-                const SizedBox(width: 6),
+                      Text(
+                        "${s.entry}:",
+                        style: TextStyle(color: Colors.grey.shade800),
+                      ),
 
-                // Vzdálenost
-                Text(
-                  _kmText(),
-                  style: TextStyle(color: Colors.grey.shade800),
-                ),
+                      if (hasWebsite)
+                        _tinyIconButton(
+                          onPressed: () => _openWebsite(context),
+                          icon: Icons.public,
+                          tooltip: "Website",
+                        ),
 
-                const Spacer(),
+                      Text(
+                        _kmText(),
+                        style: TextStyle(color: Colors.grey.shade800),
+                      ),
 
-                // 🔽 NOVĚ PŘESUNUTÉ Open
-                if (place.openNow != null) ...[
-                  Text(
-                    place.openNow! ? s.open : s.closed,
-                    style: TextStyle(
-                      color: place.openNow! ? Colors.green : Colors.grey,
-                    ),
+                      if (place.openNow != null)
+                        Text(
+                          place.openNow! ? s.open : s.closed,
+                          style: TextStyle(
+                            color: place.openNow! ? Colors.green : Colors.grey,
+                          ),
+                        ),
+
+                      if (hasGoogleMaps)
+                        _tinyIconButton(
+                          onPressed: () => _openGoogleMapsPlace(context),
+                          icon: Icons.public,
+                          tooltip: "Google Maps",
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                ],
+                ),
 
-                // 🔽 NOVĚ PŘESUNUTÉ Rating
-                if (place.rating != null) ...[
-                  Text("⭐ ${place.rating!.toStringAsFixed(1)}"),
-                  const SizedBox(width: 8),
-                ],
-
-                // 🔽 NOVĚ PŘESUNUTÉ Google Maps
-                if ((place.googleMapsUri ?? "").trim().isNotEmpty)
-                  IconButton(
-                    onPressed: () => _openGoogleMapsPlace(context),
-                    icon: const Icon(Icons.public),
-                    tooltip: "Google Maps",
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-
-                // Add to Yours (zůstává)
                 if (categoryMode && onAddToAll != null)
                   TextButton(
                     onPressed: onAddToAll,
@@ -333,13 +345,15 @@ class PlaceCard extends StatelessWidget {
               ],
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
 
             // bottom actions: ALL only
             if (!categoryMode) ...[
-              Row(
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  // Navigate (kratší, ne full width)
                   ElevatedButton(
                     onPressed: place.done
                         ? null
@@ -348,7 +362,9 @@ class PlaceCard extends StatelessWidget {
                         context: context,
                         isScrollControlled: true,
                         shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(18),
+                          ),
                         ),
                         builder: (_) => NavigationSheet(
                           place: place,
@@ -366,9 +382,6 @@ class PlaceCard extends StatelessWidget {
                     child: Text(s.navigate),
                   ),
 
-                  const SizedBox(width: 10),
-
-                  // Mark done (hned napravo od Navigate, před Replace)
                   if (onToggleDone != null)
                     OutlinedButton(
                       onPressed: onToggleDone,
@@ -377,25 +390,26 @@ class PlaceCard extends StatelessWidget {
                         minimumSize: const Size(0, 40),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: Text("Mark done"), // pokud nemáš v lokalizaci, dej "Mark done"
+                      child: const Text("Mark done"),
                     ),
-
-                  const Spacer(),
 
                   if (onReplace != null)
                     IconButton(
                       onPressed: onReplace,
                       icon: const Icon(Icons.shuffle),
                       tooltip: "Replace",
+                      visualDensity: VisualDensity.compact,
                     ),
 
-                  IconButton(
-                    onPressed: onRemove,
-                    icon: const Icon(Icons.close),
-                    tooltip: "Remove",
-                  ),
+                  if (onRemove != null)
+                    IconButton(
+                      onPressed: onRemove,
+                      icon: const Icon(Icons.close),
+                      tooltip: "Remove",
+                      visualDensity: VisualDensity.compact,
+                    ),
                 ],
-              )
+              ),
             ],
           ],
         ),
