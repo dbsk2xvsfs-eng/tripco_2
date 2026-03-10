@@ -184,7 +184,7 @@ class PlaceCard extends StatelessWidget {
 
     final visible = place.photos.take(3).toList();
     const thumbSize = 60.0;
-    const overlap = 20.0;
+    const overlap = 24.0;
 
     final stackWidth = thumbSize + ((visible.length - 1) * overlap);
     const stackHeight = 68.0;
@@ -200,18 +200,18 @@ class PlaceCard extends StatelessWidget {
             for (int i = 0; i < visible.length; i++)
               Positioned(
                 left: i * overlap,
-                top: i * 2,
+                top: i * 1,
                 child: Container(
                   width: thumbSize,
                   height: thumbSize,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(2),
                     border: Border.all(color: Colors.white, width: 2),
                     boxShadow: const [
                       BoxShadow(
                         color: Colors.black12,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
+                        blurRadius: 3,
+                        offset: Offset(0, -3),
                       ),
                     ],
                   ),

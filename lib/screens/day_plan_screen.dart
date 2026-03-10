@@ -27,6 +27,7 @@ import 'dart:async';
 
 
 
+
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
 
@@ -1909,7 +1910,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
       headers: {
         'X-Goog-Api-Key': _apiKey,
         'X-Goog-FieldMask':
-        'id,displayName,location,types,rating,regularOpeningHours,googleMapsUri,websiteUri',
+        'id,displayName,location,types,rating,regularOpeningHours,googleMapsUri,websiteUri,photos',
       },
     );
 
@@ -2031,6 +2032,25 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                                 final rating = (detail['rating'] as num?)?.toDouble();
                                 final googleMapsUri = detail['googleMapsUri'] as String?;
 
+                                final rawPhotos = (detail['photos'] as List?) ?? [];
+
+                                final photos = rawPhotos.map((p) {
+                                  final m = p as Map<String, dynamic>;
+
+                                  String? authorAttribution;
+                                  final attributions = m['authorAttributions'] as List?;
+                                  if (attributions != null && attributions.isNotEmpty) {
+                                    final first = attributions.first as Map<String, dynamic>;
+                                    authorAttribution = first['displayName'] as String?;
+                                  }
+
+                                  return PlacePhoto(
+                                    name: (m['name'] as String?) ?? '',
+                                    authorAttribution: authorAttribution,
+                                  );
+                                }).where((p) => p.name.isNotEmpty).toList();
+
+
                                 final place = Place(
                                   id: picked.placeId,
                                   name: name,
@@ -2042,6 +2062,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                                   googleMapsUri: googleMapsUri,
                                   websiteUrl: websiteUrl,
                                   isManual: true,
+                                  photos: photos,
                                 );
 
                                 debugPrint(
