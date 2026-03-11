@@ -187,7 +187,7 @@ class PlaceCard extends StatelessWidget {
     const overlap = 24.0;
 
     final stackWidth = thumbSize + ((visible.length - 1) * overlap);
-    const stackHeight = 68.0;
+    const stackHeight = 44.0;
 
     return GestureDetector(
       onTap: () => _openPhotoGallery(context),
@@ -200,7 +200,7 @@ class PlaceCard extends StatelessWidget {
             for (int i = 0; i < visible.length; i++)
               Positioned(
                 left: i * overlap,
-                top: i * 1,
+                top: 15 + (i * 1),
                 child: Container(
                   width: thumbSize,
                   height: thumbSize,
@@ -243,38 +243,43 @@ class PlaceCard extends StatelessWidget {
     return Card(
       color: (accentColor ?? Colors.white).withOpacity(0.1),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 2),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // title + photos
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Text(
-                      place.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        decoration:
-                        place.done ? TextDecoration.lineThrough : null,
-                        color: place.done ? Colors.grey : null,
+
+
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        place.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          decoration:
+                          place.done ? TextDecoration.lineThrough : null,
+                          color: place.done ? Colors.grey : null,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                if (place.photos.isNotEmpty) _buildPhotoStack(context),
-              ],
+                  if (place.photos.isNotEmpty) _buildPhotoStack(context),
+                ],
+              ),
             ),
 
-            const SizedBox(height: 6),
+            const SizedBox(height: 2),
 
             // type
             Text(
@@ -284,7 +289,7 @@ class PlaceCard extends StatelessWidget {
               style: TextStyle(color: accentColor ?? Colors.black87),
             ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
 
             // info row - responsive
             Row(

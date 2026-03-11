@@ -1767,6 +1767,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
               },
             ),
           ),
+
+          if (_loading)
+            Container(
+              color: Colors.black.withOpacity(0.05),
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
         ],
       ),
     );
