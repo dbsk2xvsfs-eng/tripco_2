@@ -17,7 +17,7 @@ class S {
       "replaced": "Replaced! 🚀",
       "removed": "Removed 😌",
       "noReplacement": "No good replacement found nearby 😅",
-      "chooseRide": "Choose your ride 🧭",
+      "chooseRide": "From GPS • choose your ride 🧭",
       "timesReal": "Times are real (Routes API). Prices are estimates (MVP).",
       "markDone": "Mark done",
       "done": "Done ✅",

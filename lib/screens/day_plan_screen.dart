@@ -26,8 +26,6 @@ import 'plan_map_screen.dart';
 import 'dart:async';
 
 
-
-
 class DayPlanScreen extends StatefulWidget {
   const DayPlanScreen({super.key});
 
@@ -40,8 +38,10 @@ enum _PopularityFilter { all, top }
 _PopularityFilter _popFilter = _PopularityFilter.all;
 
 
-class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserver {
+class _DayPlanScreenState extends State<DayPlanScreen>
+    with WidgetsBindingObserver {
   Position? _pos;
+  Position? _devicePos;
   bool _loading = true;
   String? _error;
 
@@ -62,7 +62,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       (_popFilter == _PopularityFilter.top)
           ? _categoryPoolsTop
           : _categoryPoolsNearby;
-
 
 
   final ScrollController _listCtrl = ScrollController();
@@ -104,7 +103,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       });
     }
   }
-
 
 
   static const UserProfile _fixedProfile = UserProfile.solo;
@@ -193,6 +191,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   };
 
   Color _colorForTab(String tab) => _catColor[tab] ?? const Color(0xFF607D8B);
+
   String _emojiForTab(String tab) => _catEmoji[tab] ?? "✨";
 
   // ------------------- lifecycle -------------------
@@ -207,7 +206,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     AnalyticsService.initIfAvailable();
 
     if (_apiKey.isEmpty) {
-      _error = "Missing GOOGLE_API_KEY. Run with --dart-define=GOOGLE_API_KEY=...";
+      _error =
+      "Missing GOOGLE_API_KEY. Run with --dart-define=GOOGLE_API_KEY=...";
       _loading = false;
       return;
     }
@@ -246,13 +246,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PlanMapScreen(
-          title: _selectedTab == "All" ? "Yours" : _selectedTab,
-          places: List<Place>.from(_currentList()),
-          originLat: _pos!.latitude,
-          originLng: _pos!.longitude,
-          routes: _routes,
-        ),
+        builder: (_) =>
+            PlanMapScreen(
+              title: _selectedTab == "All" ? "Yours" : _selectedTab,
+              places: List<Place>.from(_currentList()),
+              originLat: _pos!.latitude,
+              originLng: _pos!.longitude,
+              routes: _routes,
+            ),
       ),
     );
   }
@@ -275,7 +276,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       if (p == null) {
         setState(() {
           _loading = false;
-          _error = S.of(context).locationNeeded;
+          _error = S
+              .of(context)
+              .locationNeeded;
         });
         return;
       }
@@ -381,8 +384,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
         heading: 0,
         speed: 0,
         speedAccuracy: 0,
-        altitudeAccuracy: 0, // pokud ti to hází error, smaž tento řádek (dle verze geolocatoru)
-        headingAccuracy: 0,  // pokud ti to hází error, smaž tento řádek (dle verze geolocatoru)
+        altitudeAccuracy: 0,
+        // pokud ti to hází error, smaž tento řádek (dle verze geolocatoru)
+        headingAccuracy: 0, // pokud ti to hází error, smaž tento řádek (dle verze geolocatoru)
       );
 
       // reload katalogů pro nové město
@@ -410,11 +414,12 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (_) => _CityPickerSheet(
-        apiKey: _apiKey,
-        biasLat: _pos?.latitude,
-        biasLng: _pos?.longitude,
-      ),
+      builder: (_) =>
+          _CityPickerSheet(
+            apiKey: _apiKey,
+            biasLat: _pos?.latitude,
+            biasLng: _pos?.longitude,
+          ),
     );
 
     if (picked == null) return;
@@ -456,12 +461,14 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     if (pt == "museum") return "Museum";
     if (pt == "castle") return "Castles";
 
-    if (pt == "cafe" || pt == "coffee_shop" || pt == "tea_house" || pt == "bakery") return "Cafe";
+    if (pt == "cafe" || pt == "coffee_shop" || pt == "tea_house" ||
+        pt == "bakery") return "Cafe";
     if (pt == "restaurant") return "Restaurant";
 
     if (pt == "park" || pt == "hiking_area") return "Nature";
 
-    if (pt == "aquarium" || pt == "zoo" || pt == "amusement_park" || pt == "tourist_attraction") {
+    if (pt == "aquarium" || pt == "zoo" || pt == "amusement_park" ||
+        pt == "tourist_attraction") {
       return "Attraction";
     }
 
@@ -494,65 +501,72 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       return (r * 1000).round() + c;
     }
 
-    for (final entry in _categoryConfig.entries) {
-      final key = entry.key;
-      final cfg = entry.value;
+    List<Place> mapPlaces(List raw, String key) {
+      int minutesSeed = 6;
 
+      final mapped = raw
+          .map((p) {
+        minutesSeed += 1;
+        return PlaceMapper.fromGooglePlace(p, distanceMinutes: minutesSeed);
+      })
+          .where((x) => x.id.isNotEmpty)
+          .where((x) {
+        final target = _targetCategoryForPrimaryType(x.primaryType);
+        if (target == "__IGNORE__") return false;
+        return target == key;
+      })
+          .toList();
+
+      return mapped;
+    }
+
+    List<Place> trim(List<Place> list) {
+      final uniq = <String>{};
+      final out = <Place>[];
+
+      for (final pl in list) {
+        if (uniq.add(pl.id)) out.add(pl);
+        if (out.length >= _poolSize) break;
+      }
+
+      return out;
+    }
+
+    Future<void> loadOneCategory(String key, dynamic cfg) async {
       final normalRadius = min(cfg.radiusMeters, 50000);
       final topRadius = 20000;
 
-      // -------- NEARBY DATASET --------
+      final results = await Future.wait([
+        _places.nearby(
+          lat: originLat,
+          lng: originLng,
+          radiusMeters: normalRadius,
+          maxResults: 20,
+          rankPreference: "DISTANCE",
+          includedTypes: cfg.includedTypes.toList(),
+        ),
+        _places.nearby(
+          lat: originLat,
+          lng: originLng,
+          radiusMeters: topRadius,
+          maxResults: 20,
+          rankPreference: "POPULARITY",
+          includedTypes: cfg.includedTypes.toList(),
+        ),
+      ]);
 
-      final rawNearby = await _places.nearby(
-        lat: originLat,
-        lng: originLng,
-        radiusMeters: normalRadius,
-        maxResults: 20,
-        rankPreference: "DISTANCE",
-        includedTypes: cfg.includedTypes.toList(),
-      );
+      final rawNearby = results[0];
+      final rawTop = results[1];
 
-      // -------- TOP DATASET --------
+      final nearbyMapped = mapPlaces(rawNearby, key);
+      final topMapped = mapPlaces(rawTop, key);
 
-      final rawTop = await _places.nearby(
-        lat: originLat,
-        lng: originLng,
-        radiusMeters: topRadius,
-        maxResults: 20,
-        rankPreference: "POPULARITY",
-        includedTypes: cfg.includedTypes.toList(),
-      );
-
-      List<Place> mapPlaces(List raw) {
-        int minutesSeed = 6;
-
-        final mapped = raw
-            .map((p) {
-          minutesSeed += 1;
-          return PlaceMapper.fromGooglePlace(p, distanceMinutes: minutesSeed);
-        })
-            .where((x) => x.id.isNotEmpty)
-            .where((x) {
-          final target = _targetCategoryForPrimaryType(x.primaryType);
-          if (target == "__IGNORE__") return false;
-          return target == key;
-        })
-            .toList();
-
-        return mapped;
-      }
-
-      final nearbyMapped = mapPlaces(rawNearby);
-      final topMapped = mapPlaces(rawTop);
-
-      // sort nearby distance
       nearbyMapped.sort((a, b) {
         final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
         final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
         return da.compareTo(db);
       });
 
-      // sort top popularity
       topMapped.sort((a, b) {
         final sa = popScore(a);
         final sb = popScore(b);
@@ -564,21 +578,15 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
         return da.compareTo(db);
       });
 
-      List<Place> trim(List<Place> list) {
-        final uniq = <String>{};
-        final out = <Place>[];
-
-        for (final pl in list) {
-          if (uniq.add(pl.id)) out.add(pl);
-          if (out.length >= _poolSize) break;
-        }
-
-        return out;
-      }
-
       _categoryPoolsNearby[key] = trim(nearbyMapped);
       _categoryPoolsTop[key] = trim(topMapped);
     }
+
+    await Future.wait(
+      _categoryConfig.entries.map((entry) {
+        return loadOneCategory(entry.key, entry.value);
+      }),
+    );
   }
 
   List<Place> _buildInitialAllFromPools() {
@@ -675,8 +683,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
         // fallback distance (když je _pos)
         if (_pos == null) return 0;
-        final da = _haversineMeters(_pos!.latitude, _pos!.longitude, a.lat, a.lng);
-        final db = _haversineMeters(_pos!.latitude, _pos!.longitude, b.lat, b.lng);
+        final da = _haversineMeters(
+            _pos!.latitude, _pos!.longitude, a.lat, a.lng);
+        final db = _haversineMeters(
+            _pos!.latitude, _pos!.longitude, b.lat, b.lng);
         return da.compareTo(db);
       });
 
@@ -692,8 +702,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   }
 
 
-
-
   // ------------------- Category routing helpers -------------------
 
   String _categoryForPlace(Place p) {
@@ -701,8 +709,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     if (pt.isEmpty) return "Attraction";
 
     if (_categoryConfig["Cafe"]!.includedTypes.contains(pt)) return "Cafe";
-    if (_categoryConfig["Restaurant"]!.includedTypes.contains(pt)) return "Restaurant";
-    if (_categoryConfig["Castles"]!.includedTypes.contains(pt)) return "Castles";
+    if (_categoryConfig["Restaurant"]!.includedTypes.contains(pt))
+      return "Restaurant";
+    if (_categoryConfig["Castles"]!.includedTypes.contains(pt))
+      return "Castles";
 
     for (final entry in _categoryConfig.entries) {
       final cat = entry.key;
@@ -767,13 +777,17 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     final t = label.trim();
     if (t.isEmpty) return "Unknown";
     // vezmeme jen první část před čárkou -> New York, Spojené státy... => New York
-    return t.split(',').first.trim();
+    return t
+        .split(',')
+        .first
+        .trim();
   }
 
   Future<String> _resolveCityName() async {
     // 1) Když máš ručně vybrané město, použij přímo label (nejspolehlivější)
     final label = LocationService.locationLabel.value.trim();
-    if (label.isNotEmpty && label.toUpperCase() != "GPS" && label.toLowerCase() != "unknown") {
+    if (label.isNotEmpty && label.toUpperCase() != "GPS" &&
+        label.toLowerCase() != "unknown") {
       return _cityKeyFromLabel(label);
     }
 
@@ -789,14 +803,17 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     );
 
     final resp = await http.get(url);
-    if (resp.statusCode != 200) return label.isNotEmpty ? _cityKeyFromLabel(label) : "Unknown";
+    if (resp.statusCode != 200)
+      return label.isNotEmpty ? _cityKeyFromLabel(label) : "Unknown";
 
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
-    final results = (data["results"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final results = (data["results"] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
 
     String? pickFromTypes(Set<String> wanted) {
       for (final r in results) {
-        final comps = (r["address_components"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+        final comps = (r["address_components"] as List?)?.cast<
+            Map<String, dynamic>>() ?? const [];
         for (final c in comps) {
           final types = (c["types"] as List?)?.cast<String>() ?? const [];
           if (types.any(wanted.contains)) {
@@ -850,7 +867,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
             left: 16,
             right: 16,
             top: 14,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 12,
+            bottom: MediaQuery
+                .of(ctx)
+                .viewInsets
+                .bottom + 12,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -860,7 +880,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                   const Expanded(
                     child: Text(
                       'Save plan',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.w700),
                     ),
                   ),
                   IconButton(
@@ -910,19 +931,20 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   Future<void> _clearAllWithConfirm() async {
     final res = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Are you sure clean your plan ?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("No"),
+      builder: (_) =>
+          AlertDialog(
+            title: const Text("Are you sure clean your plan ?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("No"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("Yes"),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Yes"),
-          ),
-        ],
-      ),
     );
 
     if (res != true) return;
@@ -947,7 +969,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       ),
       builder: (ctx) {
         final items = [...saved]
-          ..sort((a, b) => a.city.toLowerCase().compareTo(b.city.toLowerCase()));
+          ..sort((a, b) =>
+              a.city.toLowerCase().compareTo(b.city.toLowerCase()));
 
         return SafeArea(
           child: Padding(
@@ -979,7 +1002,7 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                           onTap: () async {
                             // 1) přepni lokaci + reload pools
                             await _applyLocationAndReloadPoolsOnly(
-                              label: it.city,   // nebo it.cityLabel pokud máš
+                              label: it.city, // nebo it.cityLabel pokud máš
                               lat: it.lat,
                               lng: it.lng,
                             );
@@ -1024,7 +1047,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       builder: (ctx) {
         return AlertDialog(
           title: const Text("Save your plan?"),
-          content: const Text("If Yes, your current plan will be saved to Saved."),
+          content: const Text(
+              "If Yes, your current plan will be saved to Saved."),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(_SaveChoice.cancel),
@@ -1055,7 +1079,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
 
       final suggested = await _resolveCityName();
       final name = await _askPlanName(context, suggested);
-      if (!mounted || name == null) return false; // tady když zavře pojmenování, beru jako cancel
+      if (!mounted || name == null)
+        return false; // tady když zavře pojmenování, beru jako cancel
 
       await PlanStorage.upsertSavedPlan(
         city: name,
@@ -1153,14 +1178,15 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (_) => ReplaceSheet(
-        title: "Replace ($cat)",
-        originLat: originLat,
-        originLng: originLng,
-        currentId: current.id,
-        allIds: _allIds(),
-        candidates: candidates,
-      ),
+      builder: (_) =>
+          ReplaceSheet(
+            title: "Replace ($cat)",
+            originLat: originLat,
+            originLng: originLng,
+            currentId: current.id,
+            allIds: _allIds(),
+            candidates: candidates,
+          ),
     );
 
     if (selected == null) return;
@@ -1225,7 +1251,9 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   // ------------------- Share / refresh -------------------
 
   Future<void> _shareAll() async {
-    final lines = _allPlan.map((p) => "- ${p.name} (${p.primaryType ?? ""})").join("\n");
+    final lines = _allPlan
+        .map((p) => "- ${p.name} (${p.primaryType ?? ""})")
+        .join("\n");
     final text = "My Tripco Day Plan ☀️\n\n$lines";
     await AnalyticsService.logShare(_allPlan.length);
     await Share.share(text);
@@ -1243,6 +1271,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       _selectedTab = "All";
       _hasUnsavedChanges = false;
     });
+
+    await Future.delayed(const Duration(milliseconds: 50));
 
     try {
       await _loadCategoryPools();
@@ -1285,7 +1315,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
           text: const TextSpan(text: "eTripco", style: textStyle),
           textDirection: TextDirection.ltr,
           maxLines: 1,
-        )..layout();
+        )
+          ..layout();
 
         final textWidth = painter.width;
         final textHeight = painter.height;
@@ -1329,7 +1360,6 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   // ------------------- UI -------------------
 
 
-
   Widget _buildTipsYoursToggle(Color tipsAccent) {
     final isTop = _popFilter == _PopularityFilter.top;
     final leftLabel = _hasUnsavedChanges ? "Yours" : "Tips";
@@ -1338,7 +1368,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
     return ChoiceChip(
       showCheckmark: false,
       selected: !isTop,
-      selectedColor: Colors.amber.withOpacity(0.22), // stejná barva jako Top
+      selectedColor: Colors.amber.withOpacity(0.22),
+      // stejná barva jako Top
       backgroundColor: Colors.white,
       side: BorderSide(
         color: !isTop ? Colors.amber.shade700 : Colors.black12,
@@ -1483,9 +1514,10 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final tipsAccent = _hasUnsavedChanges ? _colorForTab("Attraction") : _colorForTab("Nature");
+    final tipsAccent = _hasUnsavedChanges
+        ? _colorForTab("Attraction")
+        : _colorForTab("Nature");
     final tipsEmoji = _hasUnsavedChanges ? "📍" : "📌";
-
 
 
     final tabs = _tabs();
@@ -1556,93 +1588,100 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          _SummaryBar(
-            count: _allPlan.length,
-            showSave: _popFilter != _PopularityFilter.top && _hasUnsavedChanges,
-            showClear: _popFilter != _PopularityFilter.top, // ✅ vždy v normal režimu
-            onSave: _saveCurrentPlanToSaved,
-            onClear: _clearAllWithConfirm,
-            onPickLocation: _openCityPicker,
-          ),
-
-          SizedBox(
-            height: 44,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-
-
-
-                  // ---------------- CATEGORY TABS ----------------
-                  Expanded(
-                    child: Row(
-                      children: [
-                        _buildTopCategoryChip(),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: tabs.where((t) => t != "All").length,
-                            separatorBuilder: (_, __) => const SizedBox(width: 8),
-                            itemBuilder: (context, i) {
-                              final otherTabs = tabs.where((t) => t != "All").toList();
-                              final t = otherTabs[i];
-                              final selected = t == _selectedTab;
-
-                              final accent = _colorForTab(t);
-                              final emoji = _emojiForTab(t);
-
-                              return ChoiceChip(
-                                label: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(emoji),
-                                    const SizedBox(width: 6),
-                                    Text(t),
-                                  ],
-                                ),
-                                selected: selected,
-                                selectedColor: accent.withOpacity(0.18),
-                                backgroundColor: accent.withOpacity(0.10),
-                                labelStyle: TextStyle(color: accent),
-                                onSelected: (_) {
-                                  setState(() {
-                                    _selectedTab = (_selectedTab == t) ? "All" : t;
-                                  });
-
-                                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                                    if (_listCtrl.hasClients) {
-                                      _listCtrl.animateTo(
-                                        0,
-                                        duration: const Duration(milliseconds: 250),
-                                        curve: Curves.easeOut,
-                                      );
-                                    }
-                                  });
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          Column(
+            children: [
+              _SummaryBar(
+                count: _allPlan.length,
+                showSave: _popFilter != _PopularityFilter.top &&
+                    _hasUnsavedChanges,
+                showClear: _popFilter != _PopularityFilter.top,
+                // ✅ vždy v normal režimu
+                onSave: _saveCurrentPlanToSaved,
+                onClear: _clearAllWithConfirm,
+                onPickLocation: _openCityPicker,
               ),
-            ),
-          ),
+
+              SizedBox(
+                height: 44,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
 
 
+                      // ---------------- CATEGORY TABS ----------------
+                      Expanded(
+                        child: Row(
+                          children: [
+                            _buildTopCategoryChip(),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: tabs
+                                    .where((t) => t != "All")
+                                    .length,
+                                separatorBuilder: (_, __) =>
+                                const SizedBox(width: 8),
+                                itemBuilder: (context, i) {
+                                  final otherTabs = tabs.where((t) =>
+                                  t != "All").toList();
+                                  final t = otherTabs[i];
+                                  final selected = t == _selectedTab;
+
+                                  final accent = _colorForTab(t);
+                                  final emoji = _emojiForTab(t);
+
+                                  return ChoiceChip(
+                                    label: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(emoji),
+                                        const SizedBox(width: 6),
+                                        Text(t),
+                                      ],
+                                    ),
+                                    selected: selected,
+                                    selectedColor: accent.withOpacity(0.18),
+                                    backgroundColor: accent.withOpacity(0.10),
+                                    labelStyle: TextStyle(color: accent),
+                                    onSelected: (_) {
+                                      setState(() {
+                                        _selectedTab =
+                                        (_selectedTab == t) ? "All" : t;
+                                      });
+
+                                      WidgetsBinding.instance
+                                          .addPostFrameCallback((_) {
+                                        if (_listCtrl.hasClients) {
+                                          _listCtrl.animateTo(
+                                            0,
+                                            duration: const Duration(
+                                                milliseconds: 250),
+                                            curve: Curves.easeOut,
+                                          );
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
 
-
-          const SizedBox(height: 6),
-          Expanded(
-            child: isTopGlobal
-                ? ListView.builder(
+              const SizedBox(height: 6),
+              Expanded(
+                child: isTopGlobal
+                    ? ListView.builder(
                   controller: _listCtrl,
                   padding: const EdgeInsets.all(12),
                   itemCount: list.length,
@@ -1650,7 +1689,8 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                     final place = list[i];
                     final isFav = FavoritesStorage.isFavorite(place.id);
 
-                    final alreadyInYours = _allPlan.any((x) => x.id == place.id);
+                    final alreadyInYours = _allPlan.any((x) =>
+                    x.id == place.id);
 
                     return PlaceCard(
                       key: ValueKey(place.id),
@@ -1658,14 +1698,18 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                       apiKey: _apiKey,
                       originLat: _pos!.latitude,
                       originLng: _pos!.longitude,
+                      deviceLat: _devicePos?.latitude,
+                      deviceLng: _devicePos?.longitude,
                       routes: _routes,
-                      accentColor: _colorForTab(_targetCategoryForPrimaryType(place.primaryType)),
+                      accentColor: _colorForTab(
+                          _targetCategoryForPrimaryType(place.primaryType)),
 
                       // ✅ chovej se jako kategorie: Add + (Navigate uvnitř karty)
                       categoryMode: true,
 
                       // ✅ jen Add (zmizí když už je v Yours)
-                      onAddToAll: alreadyInYours ? null : () => _addPlaceToAllFromTop(place),
+                      onAddToAll: alreadyInYours ? null : () =>
+                          _addPlaceToAllFromTop(place),
 
                       // ✅ zakázat věci z Yours UI
                       onRemove: null,
@@ -1677,109 +1721,125 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
                     );
                   },
                 )
-              : _selectedTab == "All"
-                  ? ReorderableListView.builder(
-                      scrollController: _listCtrl,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: list.length,
-                      onReorder: _reorderAll,
-                      itemBuilder: (context, i) {
-                        final place = list[i];
-                        final isFav = FavoritesStorage.isFavorite(place.id);
-                        final isManual = place.isManual;
+                    : _selectedTab == "All"
+                    ? ReorderableListView.builder(
+                  scrollController: _listCtrl,
+                  padding: const EdgeInsets.all(12),
+                  itemCount: list.length,
+                  onReorder: _reorderAll,
+                  itemBuilder: (context, i) {
+                    final place = list[i];
+                    final isFav = FavoritesStorage.isFavorite(place.id);
+                    final isManual = place.isManual;
 
-                        return PlaceCard(
-                          key: ValueKey(place.id),
-                          place: place,
-                          apiKey: _apiKey,
-                          originLat: _pos!.latitude,
-                          originLng: _pos!.longitude,
-                          routes: _routes,
-                          accentColor: _colorForTab(_targetCategoryForPrimaryType(place.primaryType)),
-                          categoryMode: false,
-                          onRemove: () => _removeFromAllById(place.id),
-                          onReplace: isManual ? null : () => _openReplaceForAllItem(place),
-                          onToggleDone: () => _toggleDoneInAllById(place.id),
-                          isFavorite: isFav,
-                          onToggleFavorite: () => _toggleFavorite(place),
-                          onAddToAll: null,
-                        );
-                      },
-                  )
+                    return PlaceCard(
+                      key: ValueKey(place.id),
+                      place: place,
+                      apiKey: _apiKey,
+                      originLat: _pos!.latitude,
+                      originLng: _pos!.longitude,
+                      deviceLat: _devicePos?.latitude,
+                      deviceLng: _devicePos?.longitude,
+                      routes: _routes,
+                      accentColor: _colorForTab(
+                          _targetCategoryForPrimaryType(place.primaryType)),
+                      categoryMode: false,
+                      onRemove: () => _removeFromAllById(place.id),
+                      onReplace: isManual ? null : () =>
+                          _openReplaceForAllItem(place),
+                      onToggleDone: () => _toggleDoneInAllById(place.id),
+                      isFavorite: isFav,
+                      onToggleFavorite: () => _toggleFavorite(place),
+                      onAddToAll: null,
+                    );
+                  },
+                )
 
 
+                    : ListView.builder(
 
+                  controller: _listCtrl,
 
-                : ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: list.length,
+                  itemBuilder: (context, i) {
+                    final place = list[i];
+                    final isFav = FavoritesStorage.isFavorite(place.id);
 
-              controller: _listCtrl,
+                    final isUserTab = _selectedTab == "Yours" ||
+                        _selectedTab == "Tips";
+                    final disableReplace = isUserTab && place.isManual;
 
-              padding: const EdgeInsets.all(12),
-              itemCount: list.length,
-              itemBuilder: (context, i) {
-                final place = list[i];
-                final isFav = FavoritesStorage.isFavorite(place.id);
+                    final isManual = place.isManual;
 
-                final isUserTab = _selectedTab == "Yours" || _selectedTab == "Tips";
-                final disableReplace = isUserTab && place.isManual;
-
-                final isManual = place.isManual;
-
-                if (isUserTab && isManual) {
-                  // ✅ jen Remove (pro místa z lupy)
-                  return PlaceCard(
-                    key: ValueKey(place.id),
-                    place: place,
-                    apiKey: _apiKey,
-                    originLat: _pos!.latitude,
-                    originLng: _pos!.longitude,
-                    routes: _routes,
-                    accentColor: _colorForTab(_targetCategoryForPrimaryType(place.primaryType)),
-                    categoryMode: false,
-                    onAddToAll: null,
-                    onReplace: disableReplace ? null : () => _openReplaceForAllItem(place),
-                    onToggleDone: null,
-                    onRemove: () => _removeFromPoolById(_selectedTab, place.id),
-                    isFavorite: isFav,
-                    onToggleFavorite: () => _toggleFavorite(place),
-                  );
-                }
+                    if (isUserTab && isManual) {
+                      // ✅ jen Remove (pro místa z lupy)
+                      return PlaceCard(
+                        key: ValueKey(place.id),
+                        place: place,
+                        apiKey: _apiKey,
+                        originLat: _pos!.latitude,
+                        originLng: _pos!.longitude,
+                        deviceLat: _devicePos?.latitude,
+                        deviceLng: _devicePos?.longitude,
+                        routes: _routes,
+                        accentColor: _colorForTab(_targetCategoryForPrimaryType(
+                            place.primaryType)),
+                        categoryMode: false,
+                        onAddToAll: null,
+                        onReplace: disableReplace ? null : () =>
+                            _openReplaceForAllItem(place),
+                        onToggleDone: null,
+                        onRemove: () =>
+                            _removeFromPoolById(_selectedTab, place.id),
+                        isFavorite: isFav,
+                        onToggleFavorite: () => _toggleFavorite(place),
+                      );
+                    }
 
 // ✅ ostatní (katalogové) beze změny:
-                return PlaceCard(
-                  key: ValueKey(place.id),
-                  place: place,
-                  apiKey: _apiKey,
-                  originLat: _pos!.latitude,
-                  originLng: _pos!.longitude,
-                  routes: _routes,
-                  accentColor: _colorForTab(_targetCategoryForPrimaryType(place.primaryType)),
-                  categoryMode: true,
-                  onAddToAll: _allPlan.any((x) => x.id == place.id)
-                      ? null
-                      : () => _addToAllFromCurrentTab(place),
-                  isFavorite: isFav,
-                  onToggleFavorite: () => _toggleFavorite(place),
-                  onRemove: null,
-                  onReplace: null,
-                  onToggleDone: null,
-                );
-              },
-            ),
+                    return PlaceCard(
+                      key: ValueKey(place.id),
+                      place: place,
+                      apiKey: _apiKey,
+                      originLat: _pos!.latitude,
+                      originLng: _pos!.longitude,
+                      deviceLat: _devicePos?.latitude,
+                      deviceLng: _devicePos?.longitude,
+                      routes: _routes,
+                      accentColor: _colorForTab(
+                          _targetCategoryForPrimaryType(place.primaryType)),
+                      categoryMode: true,
+                      onAddToAll: _allPlan.any((x) => x.id == place.id)
+                          ? null
+                          : () => _addToAllFromCurrentTab(place),
+                      isFavorite: isFav,
+                      onToggleFavorite: () => _toggleFavorite(place),
+                      onRemove: null,
+                      onReplace: null,
+                      onToggleDone: null,
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
 
           if (_loading)
-            Container(
-              color: Colors.black.withOpacity(0.05),
-              child: const Center(
-                child: CircularProgressIndicator(),
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.05),
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
               ),
             ),
+
+
         ],
       ),
     );
   }
-
 
 
   void _openPlaceSearch(BuildContext context) {
@@ -1791,19 +1851,21 @@ class _DayPlanScreenState extends State<DayPlanScreen> with WidgetsBindingObserv
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _PlaceSearchSheet(
-        onAddToYours: (place) {
-          setState(() {
-            // ✅ rovnou do All plánu
-            if (!_allPlan.any((x) => x.id == place.id)) {
-              _allPlan.add(place);
-              _sortAllByDistance();
-              _hasUnsavedChanges = true;
-            }
-            _selectedTab = "All"; // nebo nech "Yours" podle toho co chceš ukázat
-          });
-        },
-      ),
+      builder: (_) =>
+          _PlaceSearchSheet(
+            onAddToYours: (place) {
+              setState(() {
+                // ✅ rovnou do All plánu
+                if (!_allPlan.any((x) => x.id == place.id)) {
+                  _allPlan.add(place);
+                  _sortAllByDistance();
+                  _hasUnsavedChanges = true;
+                }
+                _selectedTab =
+                "All"; // nebo nech "Yours" podle toho co chceš ukázat
+              });
+            },
+          ),
     );
   }
 
@@ -1872,7 +1934,8 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
   }
 
   Future<List<_PlaceSuggestion>> _fetchAutocomplete(String input) async {
-    final uri = Uri.parse('https://places.googleapis.com/v1/places:autocomplete');
+    final uri = Uri.parse(
+        'https://places.googleapis.com/v1/places:autocomplete');
 
     final res = await http.post(
       uri,
@@ -1888,7 +1951,6 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
         'regionCode': 'CZ',
       }),
     );
-
 
 
     if (res.statusCode != 200) {
@@ -1937,7 +1999,9 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
 
     return SafeArea(
       child: Padding(
-        padding: MediaQuery.of(context).viewInsets,
+        padding: MediaQuery
+            .of(context)
+            .viewInsets,
         child: SizedBox(
           height: 400, // nechávám stejně jako máš teď
           child: Padding(
@@ -1950,7 +2014,8 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                     const Expanded(
                       child: Text(
                         'Search place',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.w700),
                       ),
                     ),
                     IconButton(
@@ -2014,7 +2079,8 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                               final picked = _results[index];
 
                               try {
-                                final detail = await _fetchPlaceDetail(picked.placeId);
+                                final detail = await _fetchPlaceDetail(
+                                    picked.placeId);
                                 final websiteUrl = detail['websiteUri'] as String?;
                                 if (!mounted) return;
 
@@ -2022,34 +2088,48 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                                     (detail['displayName']?['text'] as String?) ??
                                         picked.text;
 
-                                final loc = detail['location'] as Map<String, dynamic>?;
-                                final lat = (loc?['latitude'] as num?)?.toDouble();
-                                final lng = (loc?['longitude'] as num?)?.toDouble();
+                                final loc = detail['location'] as Map<
+                                    String,
+                                    dynamic>?;
+                                final lat = (loc?['latitude'] as num?)
+                                    ?.toDouble();
+                                final lng = (loc?['longitude'] as num?)
+                                    ?.toDouble();
 
                                 if (lat == null || lng == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Place has no location')),
+                                    const SnackBar(
+                                        content: Text('Place has no location')),
                                   );
                                   return;
                                 }
 
-                                final types = (detail['types'] as List?)?.cast<String>() ??
+                                final types = (detail['types'] as List?)?.cast<
+                                    String>() ??
                                     const <String>[];
-                                final placeType = types.isNotEmpty ? types.first : 'custom';
+                                final placeType = types.isNotEmpty
+                                    ? types.first
+                                    : 'custom';
 
-                                final rating = (detail['rating'] as num?)?.toDouble();
+                                final rating = (detail['rating'] as num?)
+                                    ?.toDouble();
                                 final googleMapsUri = detail['googleMapsUri'] as String?;
 
-                                final rawPhotos = (detail['photos'] as List?) ?? [];
+                                final rawPhotos = (detail['photos'] as List?) ??
+                                    [];
 
                                 final photos = rawPhotos.map((p) {
                                   final m = p as Map<String, dynamic>;
 
                                   String? authorAttribution;
                                   final attributions = m['authorAttributions'] as List?;
-                                  if (attributions != null && attributions.isNotEmpty) {
-                                    final first = attributions.first as Map<String, dynamic>;
-                                    authorAttribution = first['displayName'] as String?;
+                                  if (attributions != null &&
+                                      attributions.isNotEmpty) {
+                                    final first = attributions.first as Map<
+                                        String,
+                                        dynamic>;
+                                    authorAttribution =
+                                    first['displayName'] as String?;
                                   }
 
                                   return PlacePhoto(
@@ -2074,9 +2154,11 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                                 );
 
                                 debugPrint(
-                                    "SEARCH PICKED -> calling onAddToYours: ${place.id} $name");
+                                    "SEARCH PICKED -> calling onAddToYours: ${place
+                                        .id} $name");
                                 widget.onAddToYours(place);
-                                debugPrint("SEARCH PICKED -> called, closing sheet");
+                                debugPrint(
+                                    "SEARCH PICKED -> called, closing sheet");
                                 Navigator.pop(context);
                               } catch (e) {
                                 if (!mounted) return;
@@ -2171,16 +2253,17 @@ class _SummaryBar extends StatelessWidget {
           ValueListenableBuilder<String>(
             valueListenable: LocationService.locationLabel,
             builder: (_, label, __) {
-              return Expanded(   // ✅ klíčové
+              return Expanded( // ✅ klíčové
                 child: InkWell(
                   borderRadius: BorderRadius.circular(10),
                   onTap: onPickLocation,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Flexible(  // ✅ klíčové
+                        Flexible( // ✅ klíčové
                           child: Text(
                             label,
                             maxLines: 1,
@@ -2229,7 +2312,6 @@ class _PickedCity {
 }
 
 
-
 class _CityPickerSheet extends StatefulWidget {
   final String apiKey;
   final double? biasLat;
@@ -2248,6 +2330,7 @@ class _CityPickerSheet extends StatefulWidget {
 class _GPrediction {
   final String label;
   final String placeId;
+
   const _GPrediction({required this.label, required this.placeId});
 }
 
@@ -2257,7 +2340,6 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
   bool _loading = false;
   List<_PickedCity> _items = [];
   _PickedCity? _selected;
-
 
 
   int _callId = 0;
@@ -2270,10 +2352,36 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
 
   String _stripDiacritics(String input) {
     const map = {
-      'á': 'a', 'č': 'c', 'ď': 'd', 'é': 'e', 'ě': 'e', 'í': 'i', 'ň': 'n', 'ó': 'o',
-      'ř': 'r', 'š': 's', 'ť': 't', 'ú': 'u', 'ů': 'u', 'ý': 'y', 'ž': 'z',
-      'Á': 'A', 'Č': 'C', 'Ď': 'D', 'É': 'E', 'Ě': 'E', 'Í': 'I', 'Ň': 'N', 'Ó': 'O',
-      'Ř': 'R', 'Š': 'S', 'Ť': 'T', 'Ú': 'U', 'Ů': 'U', 'Ý': 'Y', 'Ž': 'Z',
+      'á': 'a',
+      'č': 'c',
+      'ď': 'd',
+      'é': 'e',
+      'ě': 'e',
+      'í': 'i',
+      'ň': 'n',
+      'ó': 'o',
+      'ř': 'r',
+      'š': 's',
+      'ť': 't',
+      'ú': 'u',
+      'ů': 'u',
+      'ý': 'y',
+      'ž': 'z',
+      'Á': 'A',
+      'Č': 'C',
+      'Ď': 'D',
+      'É': 'E',
+      'Ě': 'E',
+      'Í': 'I',
+      'Ň': 'N',
+      'Ó': 'O',
+      'Ř': 'R',
+      'Š': 'S',
+      'Ť': 'T',
+      'Ú': 'U',
+      'Ů': 'U',
+      'Ý': 'Y',
+      'Ž': 'Z',
     };
 
     final sb = StringBuffer();
@@ -2282,7 +2390,6 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
     }
     return sb.toString();
   }
-
 
 
   Future<List<_GPrediction>> _googleCitiesAutocomplete(String input) async {
@@ -2299,11 +2406,13 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
       params["radius"] = "200000"; // 200 km bias
     }
 
-    final uri = Uri.https("maps.googleapis.com", "/maps/api/place/autocomplete/json", params);
+    final uri = Uri.https(
+        "maps.googleapis.com", "/maps/api/place/autocomplete/json", params);
 
     final resp = await http.get(uri);
     debugPrint("G_AUTOCOMPLETE: $uri");
-    debugPrint("G_AUTOCOMPLETE status=${resp.statusCode} len=${resp.body.length}");
+    debugPrint(
+        "G_AUTOCOMPLETE status=${resp.statusCode} len=${resp.body.length}");
 
     if (resp.statusCode != 200) return const [];
 
@@ -2312,11 +2421,13 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
     final status = (root["status"] ?? "").toString();
     if (status != "OK" && status != "ZERO_RESULTS") {
       // tady uvidíš důvod typu REQUEST_DENIED / INVALID_REQUEST
-      debugPrint("G_AUTOCOMPLETE status=$status error=${root["error_message"]}");
+      debugPrint(
+          "G_AUTOCOMPLETE status=$status error=${root["error_message"]}");
       return const [];
     }
 
-    final preds = (root["predictions"] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final preds = (root["predictions"] as List?)?.cast<
+        Map<String, dynamic>>() ?? const [];
 
     return preds.map((p) {
       final desc = (p["description"] ?? "").toString().trim();
@@ -2326,8 +2437,10 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
   }
 
 
-  Future<({double lat, double lng})?> _googlePlaceDetailsLatLng(String placeId) async {
-    final uri = Uri.https("maps.googleapis.com", "/maps/api/place/details/json", {
+  Future<({double lat, double lng})?> _googlePlaceDetailsLatLng(
+      String placeId) async {
+    final uri = Uri.https(
+        "maps.googleapis.com", "/maps/api/place/details/json", {
       "place_id": placeId,
       "fields": "geometry,name",
       "key": widget.apiKey,
@@ -2358,8 +2471,6 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
 
     return (lat: lat, lng: lng);
   }
-
-
 
 
   Future<List<_PickedCity>> _fetchSuggestions(String query) async {
@@ -2425,7 +2536,10 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final bottom = MediaQuery
+        .of(context)
+        .viewInsets
+        .bottom;
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
@@ -2440,7 +2554,8 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                   const Expanded(
                     child: Text(
                       "Select a city",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700),
                     ),
                   ),
                   IconButton(
@@ -2475,7 +2590,8 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
-                  onPressed: () => Navigator.pop(context, const _PickedCity.useGps()),
+                  onPressed: () =>
+                      Navigator.pop(context, const _PickedCity.useGps()),
                   icon: const Icon(Icons.my_location),
                   label: const Text("Use GPS"),
                 ),
@@ -2510,7 +2626,8 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _selected == null ? null : () => Navigator.pop(context, _selected),
+                      onPressed: _selected == null ? null : () =>
+                          Navigator.pop(context, _selected),
                       child: const Text("Use"),
                     ),
                   ),
@@ -2529,7 +2646,9 @@ class _CityPickerSheetState extends State<_CityPickerSheet> {
 class _CategoryConfig {
   final Set<String> includedTypes;
   final int radiusMeters;
-  const _CategoryConfig({required this.includedTypes, required this.radiusMeters});
+
+  const _CategoryConfig(
+      {required this.includedTypes, required this.radiusMeters});
 }
 
 // ------------------- Haversine -------------------
@@ -2539,7 +2658,8 @@ double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
   final dLat = _degToRad(lat2 - lat1);
   final dLon = _degToRad(lon2 - lon1);
   final a = (sin(dLat / 2) * sin(dLat / 2)) +
-      cos(_degToRad(lat1)) * cos(_degToRad(lat2)) * (sin(dLon / 2) * sin(dLon / 2));
+      cos(_degToRad(lat1)) * cos(_degToRad(lat2)) *
+          (sin(dLon / 2) * sin(dLon / 2));
   final c = 2 * atan2(sqrt(a), sqrt(1 - a));
   return r * c;
 }
@@ -2547,21 +2667,18 @@ double _haversineMeters(double lat1, double lon1, double lat2, double lon2) {
 class _PlaceSuggestion {
   final String placeId;
   final String text;
+
   const _PlaceSuggestion({required this.placeId, required this.text});
 }
 
 double _degToRad(double d) => d * (pi / 180.0);
 
 
-
-
-
-
-
 enum _AddTarget { tips, yours, both }
 
 class _AddToDialog extends StatefulWidget {
   final String placeName;
+
   const _AddToDialog({required this.placeName});
 
   @override

@@ -35,6 +35,9 @@ class PlaceCard extends StatelessWidget {
 
   final String apiKey;
 
+  final double? deviceLat;
+  final double? deviceLng;
+
   const PlaceCard({
     super.key,
     required this.place,
@@ -44,6 +47,8 @@ class PlaceCard extends StatelessWidget {
     required this.isFavorite,
     required this.onToggleFavorite,
     required this.apiKey,
+    this.deviceLat,
+    this.deviceLng,
     this.onRemove,
     this.onReplace,
     this.onToggleDone,
@@ -375,6 +380,8 @@ class PlaceCard extends StatelessWidget {
                           place: place,
                           originLat: originLat,
                           originLng: originLng,
+                          gpsLat: deviceLat,
+                          gpsLng: deviceLng,
                           routes: routes,
                         ),
                       );

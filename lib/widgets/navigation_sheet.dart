@@ -11,6 +11,8 @@ class NavigationSheet extends StatefulWidget {
   final double originLat;
   final double originLng;
   final RoutesService routes;
+  final double? gpsLat;
+  final double? gpsLng;
 
   const NavigationSheet({
     super.key,
@@ -18,6 +20,8 @@ class NavigationSheet extends StatefulWidget {
     required this.originLat,
     required this.originLng,
     required this.routes,
+    this.gpsLat,
+    this.gpsLng,
   });
 
   @override
@@ -58,8 +62,8 @@ class _NavigationSheetState extends State<NavigationSheet> {
       final results = await Future.wait(modes.map((m) async {
         try {
           return await widget.routes.computeRoute(
-            originLat: widget.originLat,
-            originLng: widget.originLng,
+            originLat: widget.gpsLat ?? widget.originLat,
+            originLng: widget.gpsLng ?? widget.originLng,
             destLat: widget.place.lat,
             destLng: widget.place.lng,
             mode: m,

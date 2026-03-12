@@ -73,7 +73,10 @@ class LocationService {
 
     // Update effective position na aktuální GPS (pokud dostupná)
     final gps = await getCurrentLocation();
-    effectivePosition.value = gps;
+
+    if (gps != null) {
+      effectivePosition.value = gps;   // ⭐ skutečná GPS mobilu
+    }
   }
 
   /// Nové: vrátí polohu, kterou má aplikace používat:
@@ -87,8 +90,10 @@ class LocationService {
     }
 
     final gps = await getCurrentLocation();
-    effectivePosition.value = gps;
-    return gps;
+
+    if (gps != null) {
+      effectivePosition.value = gps;
+    }
   }
 
   /// Volitelné: zavolej při startu obrazovky/appky, aby se effectivePosition naplnilo.
