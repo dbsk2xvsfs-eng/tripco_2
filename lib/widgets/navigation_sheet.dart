@@ -5,6 +5,7 @@ import '../models/transport_option.dart';
 import '../services/analytics_service.dart';
 import '../services/navigation_service.dart';
 import '../services/routes_service.dart';
+import '../services/location_service.dart';
 
 class NavigationSheet extends StatefulWidget {
   final Place place;
@@ -59,17 +60,21 @@ class _NavigationSheetState extends State<NavigationSheet> {
         RouteTravelMode.drive,
       ];
 
+      final gps = await LocationService.getCurrentLocation();
+
+      final startLat = gps?.latitude ?? widget.originLat;
+      final startLng = gps?.longitude ?? widget.originLng;
+
       final results = await Future.wait(modes.map((m) async {
         try {
           return await widget.routes.computeRoute(
-            originLat: widget.gpsLat ?? widget.originLat,
-            originLng: widget.gpsLng ?? widget.originLng,
+            originLat: startLat,
+            originLng: startLng,
             destLat: widget.place.lat,
             destLng: widget.place.lng,
             mode: m,
           );
         } catch (_) {
-          // If one mode fails (e.g., transit not available), just skip it.
           return null;
         }
       }));
