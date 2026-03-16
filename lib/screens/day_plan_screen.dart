@@ -74,7 +74,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
   void _addPlaceToYours(Place p) {
     setState(() {
       // Pokud máš pro Yours vlastní klíč, uprav ho sem
-      final list = _categoryPools.putIfAbsent("Yours", () => <Place>[]);
+      final list = _categoryPoolsNearby.putIfAbsent("Yours", () => <Place>[]);
 
       // Nechceme duplicity
       final exists = list.any((x) => x.id == p.id);
@@ -86,7 +86,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
 
   void _removeFromYoursById(String id) {
     setState(() {
-      _categoryPools["Yours"]?.removeWhere((p) => p.id == id);
+      _categoryPoolsNearby["Yours"]?.removeWhere((p) => p.id == id);
       _hasUnsavedChanges = true;
     });
   }
@@ -125,7 +125,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
   static const Map<String, _CategoryConfig> _categoryConfig = {
     "Museum": _CategoryConfig(
       includedTypes: {"museum"},
-      radiusMeters: 50000,
+      radiusMeters: 15000,
     ),
     "Culture": _CategoryConfig(
       includedTypes: {
@@ -136,11 +136,11 @@ class _DayPlanScreenState extends State<DayPlanScreen>
         "bridge",
         "library",
       },
-      radiusMeters: 50000,
+      radiusMeters: 15000,
     ),
     "Nature": _CategoryConfig(
       includedTypes: {"park", "hiking_area"},
-      radiusMeters: 40000,
+      radiusMeters: 10000,
     ),
     "Attraction": _CategoryConfig(
       includedTypes: {
@@ -149,19 +149,19 @@ class _DayPlanScreenState extends State<DayPlanScreen>
         "zoo",
         "aquarium",
       },
-      radiusMeters: 50000,
+      radiusMeters: 10000,
     ),
     "Restaurant": _CategoryConfig(
       includedTypes: {"restaurant"},
-      radiusMeters: 15000,
+      radiusMeters: 5000,
     ),
     "Cafe": _CategoryConfig(
       includedTypes: {"cafe", "coffee_shop", "tea_house", "bakery"},
-      radiusMeters: 15000,
+      radiusMeters: 4000,
     ),
     "Castles": _CategoryConfig(
       includedTypes: {"castle"},
-      radiusMeters: 50000,
+      radiusMeters: 20000,
     ),
   };
 
@@ -534,29 +534,17 @@ class _DayPlanScreenState extends State<DayPlanScreen>
 
     Future<void> loadOneCategory(String key, dynamic cfg) async {
       final normalRadius = min(cfg.radiusMeters, 50000);
-      final topRadius = 20000;
 
-      final results = await Future.wait([
-        _places.nearby(
-          lat: originLat,
-          lng: originLng,
-          radiusMeters: normalRadius,
-          maxResults: 20,
-          rankPreference: "DISTANCE",
-          includedTypes: cfg.includedTypes.toList(),
-        ),
-        _places.nearby(
-          lat: originLat,
-          lng: originLng,
-          radiusMeters: topRadius,
-          maxResults: 20,
-          rankPreference: "POPULARITY",
-          includedTypes: cfg.includedTypes.toList(),
-        ),
-      ]);
+      final rawNearby = await _places.nearby(
+        lat: originLat,
+        lng: originLng,
+        radiusMeters: normalRadius,
+        maxResults: 8,
+        rankPreference: "DISTANCE",
+        includedTypes: cfg.includedTypes.toList(),
+      );
 
-      final rawNearby = results[0];
-      final rawTop = results[1];
+      final rawTop = <Map<String, dynamic>>[];
 
       final nearbyMapped = mapPlaces(rawNearby, key);
       final topMapped = mapPlaces(rawTop, key);
@@ -594,7 +582,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
     final out = <Place>[];
 
     for (final cat in _mainCategoriesForAll) {
-      final pool = _categoryPools[cat] ?? const <Place>[];
+      final pool = _categoryPoolsNearby[cat] ?? const <Place>[];
       int added = 0;
       for (final p in pool) {
         if (used.contains(p.id)) continue;
@@ -635,7 +623,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
     ];
 
     for (final k in preferred) {
-      final pool = _categoryPools[k];
+      final pool = _categoryPoolsNearby[k];
       if (pool != null && pool.isNotEmpty) out.add(k);
     }
 
@@ -1223,7 +1211,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
 
   void _removeFromPoolById(String tab, String id) {
     setState(() {
-      _categoryPools[tab]?.removeWhere((p) => p.id == id);
+      _categoryPoolsNearby[tab]?.removeWhere((p) => p.id == id);
       _hasUnsavedChanges = true;
     });
   }
@@ -1487,15 +1475,39 @@ class _DayPlanScreenState extends State<DayPlanScreen>
           ),
         ],
       ),
-      onSelected: (_) {
+      onSelected: (_) async {
         final turnOn = !isTop;
 
-        setState(() {
-          _popFilter = turnOn ? _PopularityFilter.top : _PopularityFilter.all;
-          if (!turnOn) {
-            _selectedTab = "All";
+        if (turnOn) {
+          setState(() {
+            _loading = true;
+          });
+
+          try {
+            await _ensureTopPoolsLoaded();
+
+            if (!mounted) return;
+            setState(() {
+              _popFilter = _PopularityFilter.top;
+            });
+          } catch (e) {
+            if (!mounted) return;
+            setState(() {
+              _error = e.toString();
+            });
+          } finally {
+            if (mounted) {
+              setState(() {
+                _loading = false;
+              });
+            }
           }
-        });
+        } else {
+          setState(() {
+            _popFilter = _PopularityFilter.all;
+            _selectedTab = "All";
+          });
+        }
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_listCtrl.hasClients) {
@@ -1507,6 +1519,89 @@ class _DayPlanScreenState extends State<DayPlanScreen>
           }
         });
       },
+    );
+  }
+
+
+  Future<void> _ensureTopPoolsLoaded() async {
+    if (_pos == null) return;
+
+    // už načteno -> nic nedělej
+    final alreadyLoaded = _categoryPoolsTop.values.any((list) => list.isNotEmpty);
+    if (alreadyLoaded) return;
+
+    final originLat = _pos!.latitude;
+    final originLng = _pos!.longitude;
+
+    int popScore(Place p) {
+      final r = p.rating ?? 0.0;
+      final c = p.userRatingsTotal ?? 0;
+      return (r * 1000).round() + c;
+    }
+
+    List<Place> mapPlaces(List raw, String key) {
+      int minutesSeed = 6;
+
+      final mapped = raw
+          .map((p) {
+        minutesSeed += 1;
+        return PlaceMapper.fromGooglePlace(p, distanceMinutes: minutesSeed);
+      })
+          .where((x) => x.id.isNotEmpty)
+          .where((x) {
+        final target = _targetCategoryForPrimaryType(x.primaryType);
+        if (target == "__IGNORE__") return false;
+        return target == key;
+      })
+          .toList();
+
+      return mapped;
+    }
+
+    List<Place> trim(List<Place> list) {
+      final uniq = <String>{};
+      final out = <Place>[];
+
+      for (final pl in list) {
+        if (uniq.add(pl.id)) out.add(pl);
+        if (out.length >= _poolSize) break;
+      }
+
+      return out;
+    }
+
+    Future<void> loadOneTopCategory(String key, dynamic cfg) async {
+      final topRadius = 12000;
+
+      final rawTop = await _places.nearby(
+        lat: originLat,
+        lng: originLng,
+        radiusMeters: topRadius,
+        maxResults: 8,
+        rankPreference: "POPULARITY",
+        includedTypes: cfg.includedTypes.toList(),
+      );
+
+      final topMapped = mapPlaces(rawTop, key);
+
+      topMapped.sort((a, b) {
+        final sa = popScore(a);
+        final sb = popScore(b);
+        final s = sb.compareTo(sa);
+        if (s != 0) return s;
+
+        final da = _haversineMeters(originLat, originLng, a.lat, a.lng);
+        final db = _haversineMeters(originLat, originLng, b.lat, b.lng);
+        return da.compareTo(db);
+      });
+
+      _categoryPoolsTop[key] = trim(topMapped);
+    }
+
+    await Future.wait(
+      _categoryConfig.entries.map((entry) {
+        return loadOneTopCategory(entry.key, entry.value);
+      }),
     );
   }
 

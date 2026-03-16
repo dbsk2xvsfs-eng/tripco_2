@@ -187,51 +187,32 @@ class PlaceCard extends StatelessWidget {
   Widget _buildPhotoStack(BuildContext context) {
     if (place.photos.isEmpty) return const SizedBox.shrink();
 
-    final visible = place.photos.take(3).toList();
-    const thumbSize = 60.0;
-    const overlap = 24.0;
-
-    final stackWidth = thumbSize + ((visible.length - 1) * overlap);
-    const stackHeight = 44.0;
+    final photo = place.photos.first;
 
     return GestureDetector(
       onTap: () => _openPhotoGallery(context),
-      child: SizedBox(
-        width: stackWidth,
-        height: stackHeight,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            for (int i = 0; i < visible.length; i++)
-              Positioned(
-                left: i * overlap,
-                top: 15 + (i * 1),
-                child: Container(
-                  width: thumbSize,
-                  height: thumbSize,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 3,
-                        offset: Offset(0, -3),
-                      ),
-                    ],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.network(
-                    _photoUrl(visible[i].name, maxWidth: 200),
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: Colors.grey.shade200,
-                      child: const Icon(Icons.image, size: 20),
-                    ),
-                  ),
-                ),
-              ),
+      child: Container(
+        width: 92,
+        height: 62,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white, width: 2),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 3,
+              offset: Offset(0, 1),
+            ),
           ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Image.network(
+          _photoUrl(photo.name, maxWidth: 400),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            color: Colors.grey.shade200,
+            child: const Icon(Icons.image, size: 28),
+          ),
         ),
       ),
     );
@@ -250,21 +231,19 @@ class PlaceCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.only(bottom: 2),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // title + photos
-
-
             Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.only(top: 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 110),
                       child: Text(
                         place.name,
                         maxLines: 2,
@@ -278,23 +257,42 @@ class PlaceCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ),
-                  if (place.photos.isNotEmpty) _buildPhotoStack(context),
-                ],
+                    if (place.photos.isNotEmpty)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: _buildPhotoStack(context),
+                      ),
+                  ],
+                ),
               ),
             ),
 
-            const SizedBox(height: 2),
+            const SizedBox(height: 1),
 
-            // type
-            Text(
-              place.type,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: accentColor ?? Colors.black87),
+            Row(
+              children: [
+                Text(
+                  place.type,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: accentColor ?? Colors.black87),
+                ),
+                const SizedBox(width: 8),
+                if (categoryMode && onAddToAll != null)
+                  TextButton(
+                    onPressed: onAddToAll,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text("Add to plan"),
+                  ),
+              ],
             ),
 
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
 
             // info row - responsive
             Row(
@@ -341,21 +339,10 @@ class PlaceCard extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                if (categoryMode && onAddToAll != null)
-                  TextButton(
-                    onPressed: onAddToAll,
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text("Add"),
-                  ),
               ],
             ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 2),
 
             // bottom actions: ALL only
             if (!categoryMode) ...[

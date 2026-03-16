@@ -51,10 +51,8 @@ class PlacesService {
         "places.types",
         "places.rating",
         "places.userRatingCount",
-        "places.currentOpeningHours",
         "places.websiteUri",
         "places.googleMapsUri",
-        "places.primaryTypeDisplayName",
         "places.photos",
       ].join(","),
     };
@@ -86,8 +84,8 @@ class PlacesService {
   /// - pokud je vybrané město (MANUAL), použije jeho souřadnice
   /// - jinak použije GPS polohu zařízení
   Future<List<Map<String, dynamic>>> nearbyFromEffectiveLocation({
-    int radiusMeters = 6000,
-    int maxResults = 12,
+    int radiusMeters = 2500,
+    int maxResults = 6,
     String rankPreference = "DISTANCE",
     List<String> includedTypes = const [
       "tourist_attraction",
