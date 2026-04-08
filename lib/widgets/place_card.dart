@@ -8,6 +8,8 @@ import '../models/place.dart';
 import '../services/routes_service.dart';
 import 'navigation_sheet.dart';
 
+import 'package:cached_network_image/cached_network_image.dart';
+
 class PlaceCard extends StatelessWidget {
   final Place place;
 
@@ -142,10 +144,17 @@ class PlaceCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: InteractiveViewer(
-                      child: Image.network(
-                        _photoUrl(photo.name, maxWidth: 1200),
+                      child: CachedNetworkImage(
+                        imageUrl: _photoUrl(photo.name, maxWidth: 1200),
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) =>
+                        placeholder: (_, __) => const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (_, __, ___) =>
                         const Center(child: Icon(Icons.broken_image, size: 48)),
                       ),
                     ),
@@ -206,10 +215,20 @@ class PlaceCard extends StatelessWidget {
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: Image.network(
-          _photoUrl(photo.name, maxWidth: 400),
+        child: CachedNetworkImage(
+          imageUrl: _photoUrl(photo.name, maxWidth: 400),
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
+          placeholder: (_, __) => Container(
+            color: Colors.grey.shade100,
+            child: const Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+          errorWidget: (_, __, ___) => Container(
             color: Colors.grey.shade200,
             child: const Icon(Icons.image, size: 28),
           ),
@@ -389,7 +408,7 @@ class PlaceCard extends StatelessWidget {
                         minimumSize: const Size(0, 40),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: const Text("Mark done"),
+                      child: const Text("Visited"),
                     ),
 
                   if (onReplace != null)

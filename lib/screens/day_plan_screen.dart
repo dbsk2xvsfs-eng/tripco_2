@@ -23,7 +23,11 @@ import '../widgets/place_card.dart';
 import '../widgets/replace_sheet.dart';
 import 'plan_map_screen.dart';
 
+import '../services/places_cache_service.dart';
+
 import 'dart:async';
+
+import 'dart:ui';
 
 
 class DayPlanScreen extends StatefulWidget {
@@ -45,6 +49,10 @@ class _DayPlanScreenState extends State<DayPlanScreen>
   bool _loading = true;
   String? _error;
 
+  // 🟢 FREE / PREMIUM STATE
+  int _freePlansRemaining = 3;
+  DateTime? _premiumExpiresAt;
+
   late final RecommendationService _rec;
   late final RoutesService _routes;
   late final PlacesService _places;
@@ -57,6 +65,18 @@ class _DayPlanScreenState extends State<DayPlanScreen>
 
   final Map<String, List<Place>> _categoryPoolsNearby = {};
   final Map<String, List<Place>> _categoryPoolsTop = {};
+
+  // 👉 PŘIDEJ TADY ↓↓↓
+  String? _lastCacheKey;
+
+  final Map<String, Map<String, List<Place>>> _nearbyCache = {};
+  final Map<String, Map<String, List<Place>>> _topCache = {};
+
+  String _buildCacheKey(double lat, double lng) {
+    final latR = lat.toStringAsFixed(2);
+    final lngR = lng.toStringAsFixed(2);
+    return "${latR}_$lngR";
+  }
 
   Map<String, List<Place>> get _categoryPools =>
       (_popFilter == _PopularityFilter.top)
@@ -153,7 +173,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
     ),
     "Restaurant": _CategoryConfig(
       includedTypes: {"restaurant"},
-      radiusMeters: 5000,
+      radiusMeters: 10000,
     ),
     "Cafe": _CategoryConfig(
       includedTypes: {"cafe", "coffee_shop", "tea_house", "bakery"},
@@ -365,16 +385,46 @@ class _DayPlanScreenState extends State<DayPlanScreen>
       _selectedTab = "All";
     });
 
+    final cacheKey = _buildCacheKey(lat, lng);
+    final hasCache = _nearbyCache.containsKey(cacheKey);
+    final now = DateTime.now();
+
+    if (_premiumExpiresAt == null || !_premiumExpiresAt!.isAfter(now)) {
+      if (!hasCache && _freePlansRemaining > 0) {
+        setState(() {
+          _freePlansRemaining -= 1;
+        });
+
+        if (_freePlansRemaining <= 0) {
+          _showPaywall();
+        }
+      } else if (!hasCache && _freePlansRemaining <= 0) {
+        _showPaywall();
+        return;
+      }
+    }
+
+    String debugText = "";
+
+    if (_premiumExpiresAt != null && _premiumExpiresAt!.isAfter(now)) {
+      final remaining = _premiumExpiresAt!.difference(now).inDays;
+      debugText = "Premium active ($remaining days left)";
+    } else {
+      debugText = "You have $_freePlansRemaining of 10 free plans left";
+    }
+
+
+
+    debugPrint("APPLY CITY: $label | $lat, $lng");
+
     _ignoreEffectivePosChanges = true;
     try {
-      // nastav manual lokaci (změní label nahoře + effectivePosition)
       LocationService.setManualLocation(
         label: label,
         latitude: lat,
         longitude: lng,
       );
 
-      // nastav _pos tak, aby se vše počítalo od nového místa
       _pos = Position(
         latitude: lat,
         longitude: lng,
@@ -385,11 +435,9 @@ class _DayPlanScreenState extends State<DayPlanScreen>
         speed: 0,
         speedAccuracy: 0,
         altitudeAccuracy: 0,
-        // pokud ti to hází error, smaž tento řádek (dle verze geolocatoru)
-        headingAccuracy: 0, // pokud ti to hází error, smaž tento řádek (dle verze geolocatoru)
+        headingAccuracy: 0,
       );
 
-      // reload katalogů pro nové město
       _categoryPoolsNearby.clear();
       _categoryPoolsTop.clear();
       await _loadCategoryPools();
@@ -414,25 +462,36 @@ class _DayPlanScreenState extends State<DayPlanScreen>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (_) =>
-          _CityPickerSheet(
-            apiKey: _apiKey,
-            biasLat: _pos?.latitude,
-            biasLng: _pos?.longitude,
-          ),
+      builder: (_) => _CityPickerSheet(
+        apiKey: _apiKey,
+        biasLat: _pos?.latitude,
+        biasLng: _pos?.longitude,
+      ),
     );
 
     if (picked == null) return;
 
+    debugPrint("PICKED CITY: ${picked.label} | ${picked.lat}, ${picked.lng} | useGps=${picked.useGps}");
+
     if (picked.useGps) {
+      final gps = await LocationService.getCurrentLocation();
+      if (gps == null) return;
+
       await LocationService.clearManualLocation();
+      _pos = gps;
+
+      await _applyLocationAndReloadPoolsOnly(
+        label: "GPS",
+        lat: gps.latitude,
+        lng: gps.longitude,
+      );
       return;
     }
 
-    LocationService.setManualLocation(
+    await _applyLocationAndReloadPoolsOnly(
       label: picked.label,
-      latitude: picked.lat,
-      longitude: picked.lng,
+      lat: picked.lat,
+      lng: picked.lng,
     );
   }
 
@@ -495,6 +554,15 @@ class _DayPlanScreenState extends State<DayPlanScreen>
     final originLat = _pos!.latitude;
     final originLng = _pos!.longitude;
 
+    final cacheKey = _buildCacheKey(originLat, originLng);
+
+    if (_nearbyCache.containsKey(cacheKey)) {
+      _categoryPoolsNearby
+        ..clear()
+        ..addAll(_nearbyCache[cacheKey]!);
+      return;
+    }
+
     int popScore(Place p) {
       final r = p.rating ?? 0.0;
       final c = p.userRatingsTotal ?? 0;
@@ -539,7 +607,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
         lat: originLat,
         lng: originLng,
         radiusMeters: normalRadius,
-        maxResults: 8,
+        maxResults: 20,
         rankPreference: "DISTANCE",
         includedTypes: cfg.includedTypes.toList(),
       );
@@ -575,10 +643,15 @@ class _DayPlanScreenState extends State<DayPlanScreen>
         return loadOneCategory(entry.key, entry.value);
       }),
     );
+    
+    _nearbyCache[cacheKey] = Map<String, List<Place>>.from(
+      _categoryPoolsNearby.map((k, v) => MapEntry(k, List<Place>.from(v))),
+    );
   }
 
   List<Place> _buildInitialAllFromPools() {
     final used = <String>{};
+
     final out = <Place>[];
 
     for (final cat in _mainCategoriesForAll) {
@@ -1250,6 +1323,24 @@ class _DayPlanScreenState extends State<DayPlanScreen>
   Future<void> _refreshEverything() async {
     if (_pos == null) return;
 
+    final now = DateTime.now();
+
+    debugPrint("PREMIUM EXPIRES: $_premiumExpiresAt | ACTIVE: ${_premiumExpiresAt != null && _premiumExpiresAt!.isAfter(now)}");
+
+    if (_premiumExpiresAt == null || !_premiumExpiresAt!.isAfter(now)) {
+      final cacheKey = _buildCacheKey(_pos!.latitude, _pos!.longitude);
+      final hasCache = _nearbyCache.containsKey(cacheKey);
+
+      if (!hasCache && _freePlansRemaining > 0) {
+        setState(() {
+          _freePlansRemaining -= 1;
+        });
+      } else if (!hasCache && _freePlansRemaining <= 0) {
+        _showPaywall();
+        return;
+      }
+    }
+
     final proceed = await _askSaveCurrentPlanToSaved();
     if (!proceed) return;
 
@@ -1278,6 +1369,92 @@ class _DayPlanScreenState extends State<DayPlanScreen>
         _error = e.toString();
       });
     }
+  }
+
+  void _showPaywall() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Unlock Tripco Premium"),
+        content: const Text("Unlimited planning for your weekend or holiday"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _activatePremium3Days();
+            },
+            child: const Text("3 days"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _activatePremium7Days();
+            },
+            child: const Text("7 days"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _activatePremium14Days();
+            },
+            child: const Text("14 days"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text("Cancel"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanStatusBar() {
+    final now = DateTime.now();
+
+    String text;
+    if (_premiumExpiresAt != null && _premiumExpiresAt!.isAfter(now)) {
+      final remaining = _premiumExpiresAt!.difference(now).inDays;
+      text = "Premium active • $remaining days left";
+    } else {
+      text = "$_freePlansRemaining of 10 free plans left";
+    }
+
+    return Container(
+      height: 44,
+      alignment: Alignment.center,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  void _activatePremium3Days() {
+    setState(() {
+      _premiumExpiresAt = DateTime.now().add(const Duration(days: 3));
+    });
+  }
+
+  void _activatePremium7Days() {
+    setState(() {
+      _premiumExpiresAt = DateTime.now().add(const Duration(days: 7));
+    });
+  }
+
+  void _activatePremium14Days() {
+    setState(() {
+      _premiumExpiresAt = DateTime.now().add(const Duration(days: 14));
+    });
   }
 
   Future<void> _startFresh() async {
@@ -1533,6 +1710,15 @@ class _DayPlanScreenState extends State<DayPlanScreen>
     final originLat = _pos!.latitude;
     final originLng = _pos!.longitude;
 
+    final cacheKey = _buildCacheKey(originLat, originLng);
+
+    if (_topCache.containsKey(cacheKey)) {
+      _categoryPoolsTop
+        ..clear()
+        ..addAll(_topCache[cacheKey]!);
+      return;
+    }
+
     int popScore(Place p) {
       final r = p.rating ?? 0.0;
       final c = p.userRatingsTotal ?? 0;
@@ -1603,6 +1789,10 @@ class _DayPlanScreenState extends State<DayPlanScreen>
         return loadOneTopCategory(entry.key, entry.value);
       }),
     );
+
+    _topCache[cacheKey] = Map<String, List<Place>>.from(
+      _categoryPoolsTop.map((k, v) => MapEntry(k, List<Place>.from(v))),
+    );
   }
 
 
@@ -1646,6 +1836,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
           ],
         ),
 
+
         actions: [
           IconButton(
             icon: const Icon(Icons.map_outlined),
@@ -1683,6 +1874,9 @@ class _DayPlanScreenState extends State<DayPlanScreen>
           ),
         ],
       ),
+
+      bottomNavigationBar: _buildPlanStatusBar(),
+
       body: Stack(
         children: [
           Column(
@@ -1929,8 +2123,6 @@ class _DayPlanScreenState extends State<DayPlanScreen>
                 ),
               ),
             ),
-
-
         ],
       ),
     );
