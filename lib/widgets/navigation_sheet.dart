@@ -38,6 +38,8 @@ class _NavigationSheetState extends State<NavigationSheet> {
   void initState() {
     super.initState();
     _load();
+
+
   }
 
   String _formatMinutes(int minutes) {

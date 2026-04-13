@@ -24,10 +24,11 @@ import '../widgets/replace_sheet.dart';
 import 'plan_map_screen.dart';
 
 import '../services/places_cache_service.dart';
-
 import 'dart:async';
-
 import 'dart:ui';
+import 'package:in_app_purchase/in_app_purchase.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 class DayPlanScreen extends StatefulWidget {
@@ -50,8 +51,10 @@ class _DayPlanScreenState extends State<DayPlanScreen>
   String? _error;
 
   // 🟢 FREE / PREMIUM STATE
-  int _freePlansRemaining = 3;
+  int _freePlansRemaining = 5;
   DateTime? _premiumExpiresAt;
+
+  StreamSubscription<List<PurchaseDetails>>? _subscription;
 
   late final RecommendationService _rec;
   late final RoutesService _routes;
@@ -236,6 +239,9 @@ class _DayPlanScreenState extends State<DayPlanScreen>
     _rec = RecommendationService(places: _places);
     _routes = RoutesService(apiKey: _apiKey);
 
+    // načtení uloženého premium/free stavu
+    _loadBillingState();
+
     // Listener: když se změní efektivní poloha (GPS <-> město), přestav plán
     _effectivePosListener = () {
       if (_ignoreEffectivePosChanges) return;
@@ -245,6 +251,18 @@ class _DayPlanScreenState extends State<DayPlanScreen>
       _applyNewLocationAndRebuild(p);
     };
     LocationService.effectivePosition.addListener(_effectivePosListener);
+
+    _subscription = InAppPurchase.instance.purchaseStream.listen((purchases) {
+      for (var purchase in purchases) {
+        if (purchase.status == PurchaseStatus.purchased) {
+          _handlePurchase(purchase.productID);
+        }
+
+        if (purchase.pendingCompletePurchase) {
+          InAppPurchase.instance.completePurchase(purchase);
+        }
+      }
+    });
 
     _init();
   }
@@ -256,6 +274,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
     _listCtrl.dispose();
 
     WidgetsBinding.instance.removeObserver(this);
+    _subscription?.cancel();
     super.dispose();
   }
 
@@ -394,6 +413,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
         setState(() {
           _freePlansRemaining -= 1;
         });
+        await _saveFreePlansRemaining();
 
         if (_freePlansRemaining <= 0) {
           _showPaywall();
@@ -410,7 +430,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
       final remaining = _premiumExpiresAt!.difference(now).inDays;
       debugText = "Premium active ($remaining days left)";
     } else {
-      debugText = "You have $_freePlansRemaining of 10 free plans left";
+      debugText = "You have $_freePlansRemaining of 5 free plans left";
     }
 
 
@@ -1320,6 +1340,68 @@ class _DayPlanScreenState extends State<DayPlanScreen>
     await Share.share(text);
   }
 
+  Future<void> _buy(String productId) async {
+    final response =
+    await InAppPurchase.instance.queryProductDetails({productId});
+
+    if (response.productDetails.isEmpty) return;
+
+    final product = response.productDetails.first;
+
+    final purchaseParam = PurchaseParam(productDetails: product);
+
+    InAppPurchase.instance.buyNonConsumable(
+      purchaseParam: purchaseParam,
+    );
+  }
+
+  Future<void> _savePremiumExpiry() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_premiumExpiresAt == null) {
+      await prefs.remove('premium_expires_at');
+    } else {
+      await prefs.setString(
+        'premium_expires_at',
+        _premiumExpiresAt!.toIso8601String(),
+      );
+    }
+  }
+
+  Future<void> _saveFreePlansRemaining() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('free_plans_remaining', _freePlansRemaining);
+  }
+
+  Future<void> _loadBillingState() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final premiumRaw = prefs.getString('premium_expires_at');
+    if (premiumRaw != null && premiumRaw.isNotEmpty) {
+      _premiumExpiresAt = DateTime.tryParse(premiumRaw);
+    }
+
+    _freePlansRemaining = prefs.getInt('free_plans_remaining') ?? 10;
+  }
+
+  Future<void> _handlePurchase(String productId) async {
+    final now = DateTime.now();
+
+    setState(() {
+      if (productId == "premium_3d") {
+        _premiumExpiresAt = now.add(const Duration(days: 3));
+      } else if (productId == "premium_7d") {
+        _premiumExpiresAt = now.add(const Duration(days: 7));
+      } else if (productId == "premium_14d") {
+        _premiumExpiresAt = now.add(const Duration(days: 14));
+      }
+    });
+
+    await _savePremiumExpiry();
+  }
+
+
+
+
   Future<void> _refreshEverything() async {
     if (_pos == null) return;
 
@@ -1335,6 +1417,7 @@ class _DayPlanScreenState extends State<DayPlanScreen>
         setState(() {
           _freePlansRemaining -= 1;
         });
+        await _saveFreePlansRemaining();
       } else if (!hasCache && _freePlansRemaining <= 0) {
         _showPaywall();
         return;
@@ -1381,23 +1464,23 @@ class _DayPlanScreenState extends State<DayPlanScreen>
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _activatePremium3Days();
+              _buy("premium_3d");
             },
-            child: const Text("3 days"),
+            child: const Text("3 days • €2.99"),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _activatePremium7Days();
+              _buy("premium_7d");
             },
-            child: const Text("7 days"),
+            child: const Text("7 days • €4.99"),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _activatePremium14Days();
+              _buy("premium_14d");
             },
-            child: const Text("14 days"),
+            child: const Text("14 days • €7.99"),
           ),
           TextButton(
             onPressed: () {
@@ -1418,22 +1501,26 @@ class _DayPlanScreenState extends State<DayPlanScreen>
       final remaining = _premiumExpiresAt!.difference(now).inDays;
       text = "Premium active • $remaining days left";
     } else {
-      text = "$_freePlansRemaining of 10 free plans left";
+      text = "$_freePlansRemaining of 5 free plans left";
     }
 
-    return Container(
-      height: 44,
-      alignment: Alignment.center,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, bottomInset + 8),
+      child: Container(
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -2155,7 +2242,6 @@ class _DayPlanScreenState extends State<DayPlanScreen>
           ),
     );
   }
-
 }
 
 class _PlaceSearchSheet extends StatefulWidget {
